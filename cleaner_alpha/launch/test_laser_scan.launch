@@ -1,0 +1,23 @@
+<?xml version="1.0"?>
+<launch>
+
+	<!-- set global parameters -->
+	<param name="robot_description" command="$(find xacro)/xacro.py $(find laser_to_cloud)/test_data/diffdrive.xacro"/>
+	<param name="laser_scan_topic" type="string" value="/base_scan"/>
+	<param name="transform_cloud_topic" type="string" value="/laser_point_cloud"/>
+	<param name="base_link" type="string" value="/base_laser_link"/>
+
+	<!-- start transformation node --> 
+	<node name="laser_to_cloud" pkg="laser_to_cloud" type="laser_to_cloud" output="screen" />
+
+	<!-- start cleaner node -->
+	<node pkg="cleaner_alpha" type="cleaner" name="cleaner" output="screen" />
+
+	<!-- start rosbag to play testfile -->
+	<node pkg="rosbag" type="play" name="player" output="screen" args=" $(find laser_to_cloud)/test_data/Mapping2.bag"/>
+
+
+
+	<!-- use rviz to display what's going on-->
+	<node pkg="rviz" name="rviz" type="rviz" args="-d $(find cleaner_alpha)/config/test_laser_scan.rviz" />
+</launch>

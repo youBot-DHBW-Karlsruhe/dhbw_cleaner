@@ -1,0 +1,113 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="diffdrive">
+  <xacro:property name="width" value="0.5" />
+  <xacro:property name="length" value="1.0" />
+  <xacro:property name="extra" value="0.1" />
+  <xacro:property name="wheel_radius" value="1.0" />
+  <xacro:property name="wheel_width" value=".1" />
+
+  <link name="base_link">
+    <visual>
+      <origin xyz="0.0 0.0 ${-wheel_radius/2+extra}"/>
+      <geometry>
+        <box size="${length} ${width} ${wheel_radius}"/>
+      </geometry>
+      <material name="blue">
+        <color rgba="0 0 .8 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0.0 0.0 ${-wheel_radius/2+extra}"/>
+      <geometry>
+        <box size="${length} ${width} ${wheel_radius}"/>
+      </geometry>
+    </collision>
+    <inertial>
+      <mass value="10"/>
+      <inertia ixx="1.0" ixy="0.0" ixz="0.0" iyy="1.0" iyz="0.0" izz="1.0"/>
+    </inertial>
+  </link>
+  
+  <xacro:macro name="wheel" params="prefix sign">
+  <link name="${prefix}_wheel">
+    <visual>
+      <geometry>
+        <cylinder length="${wheel_width}" radius="${wheel_radius}"/>
+      </geometry>
+      <material name="black">
+        <color rgba="0 0 0 1"/>
+      </material>
+    </visual>
+    <collision>
+      <geometry>
+        <cylinder length="${wheel_width}" radius="${wheel_radius}"/>
+      </geometry>
+    </collision>
+    <inertial>
+      <mass value="5"/>
+      <inertia ixx="1.0" ixy="0.0" ixz="0.0" iyy="1.0" iyz="0.0" izz="1.0"/>
+    </inertial>
+  </link>
+  
+  <joint name="${prefix}_wheel_joint" type="continuous">
+    <axis xyz="0 0 -1"/>
+    <parent link="base_link"/>
+    <child link="${prefix}_wheel"/>
+    <origin rpy="1.57075 0 0" xyz="0 ${sign*(width+wheel_width)/2} 0.0"/>
+    <limit effort="100" velocity="100"/>
+    <joint_properties damping="0.0" friction="0.0"/>
+  </joint>  
+
+  <transmission name="${prefix}_tran1">
+    <type>transmission_interface/SimpleTransmission</type>
+    <joint name="${prefix}_wheel_joint">
+      <hardwareInterface>VelocityJointInterface</hardwareInterface>
+    </joint>
+    <actuator name="${prefix}_motor">
+      <hardwareInterface>VelocityJointInterface</hardwareInterface>
+      <mechanicalReduction>1</mechanicalReduction>
+    </actuator>
+  </transmission>
+
+  </xacro:macro>
+  
+  <xacro:wheel prefix="left" sign="1" />
+  <xacro:wheel prefix="right" sign="-1" />
+  
+  <xacro:macro name="support" params="prefix sign">
+  <link name="${prefix}_support">
+    <visual>
+      <geometry>
+        <sphere radius="${extra}"/>
+      </geometry>
+      <material name="black">
+        <color rgba="0 0 0 1"/>
+      </material>
+    </visual>
+    <collision>
+      <geometry>
+        <sphere radius="${extra}"/>
+      </geometry>
+    </collision>
+    <inertial>
+      <mass value="1"/>
+      <inertia ixx="1.0" ixy="0.0" ixz="0.0" iyy="1.0" iyz="0.0" izz="1.0"/>
+    </inertial>
+  </link>
+  
+  <joint name="${prefix}_support_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="${prefix}_support"/>
+    <origin xyz="${sign*length/2*.8} 0.0 ${-wheel_radius+extra}"/>
+    <limit effort="100" velocity="100"/>
+    <joint_properties damping="0.0" friction="0.0"/>
+  </joint>  
+
+  </xacro:macro>
+  <xacro:support prefix="front" sign="1" />
+  <xacro:support prefix="back" sign="-1" />
+  
+  
+</robot>
+
+

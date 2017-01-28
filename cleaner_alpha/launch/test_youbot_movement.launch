@@ -1,0 +1,21 @@
+<?xml version="1.0"?>
+<launch>
+	<param name="laser_scan_topic" type="string" value="/scan"/>
+	<param name="transform_cloud_topic" type="string" value="/laser_point_cloud"/>
+	<param name="base_link" type="string" value="/laser"/>
+
+	<!-- start transformation node --> 
+	<node name="laser_to_cloud" pkg="laser_to_cloud" type="laser_to_cloud" output="screen" />
+
+	<!-- start object finder node -->
+	<node pkg="object_finder_2d" type="object_finder_2d" name="object_finder_2d" output="screen" />
+
+	<!-- launch cleaner node -->
+	<node pkg="cleaner_alpha" name="cleaner" type="cleaner" output="screen" />
+
+
+	<!-- use rviz to display what's going on-->
+<!--
+	<node pkg="rviz" name="rviz" type="rviz" args="-d $(find object_finder_2d)/config/test_youbot_laser_scan.rviz" />
+-->
+</launch>

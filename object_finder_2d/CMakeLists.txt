@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 2.8.3)
-project(cleaner_alpha)
+project(object_finder_2d)
 
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
@@ -101,6 +101,10 @@ find_package(catkin REQUIRED COMPONENTS
 ## CATKIN_DEPENDS: catkin_packages dependent projects also need
 ## DEPENDS: system dependencies of this project that dependent projects also need
 catkin_package(
+#  INCLUDE_DIRS include
+#  LIBRARIES laser_to_cloud
+#  CATKIN_DEPENDS laser_geometry message_filters
+#  DEPENDS system_lib
 )
 
 ###########
@@ -115,16 +119,25 @@ include_directories(
   ${catkin_INCLUDE_DIRS}
 )
 
+## Declare a C++ library
+# add_library(laser_to_cloud
+#   src/${PROJECT_NAME}/laser_to_cloud.cpp
+# )
+
+## Add cmake target dependencies of the library
+## as an example, code may need to be generated before libraries
+## either from message generation or dynamic reconfigure
+# add_dependencies(laser_to_cloud ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+
 ## Declare a C++ executable
-add_executable(cleaner
-    src/Cleaner.cpp
-    src/classes/Youbot.cpp
-    src/classes/Direction.cpp
+add_executable(object_finder_2d
+    src/PointCloudObjectFinder.cpp
+    src/classes/ObjectFinder.cpp
 )
-add_dependencies(cleaner
+add_dependencies(object_finder_2d
     ${catkin_EXPORTED_TARGETS}
 )
-target_link_libraries(cleaner
+target_link_libraries(object_finder_2d
 	${catkin_LIBRARIES}
 )
 
@@ -144,7 +157,7 @@ target_link_libraries(cleaner
 # )
 
 ## Mark executables and/or libraries for installation
-install(TARGETS cleaner
+install(TARGETS object_finder_2d
   ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
   LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
   RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}

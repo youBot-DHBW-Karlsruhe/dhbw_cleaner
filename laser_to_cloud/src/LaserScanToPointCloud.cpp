@@ -6,6 +6,8 @@
 #include "laser_geometry/laser_geometry.h"
 
 class LaserScanToPointCloud {
+public:
+    typedef boost::function<void (const sensor_msgs::PointCloud&)> t_callback;
 
 private: 
   
@@ -14,6 +16,7 @@ private:
   message_filters::Subscriber<sensor_msgs::LaserScan> laserSubscriber;
   tf::MessageFilter<sensor_msgs::LaserScan> laserFilter;
   ros::Publisher scanPublisher;
+  std::vector<t_callback> callbacks;
 
 public:
 
@@ -55,11 +58,28 @@ public:
     // publish point cloud on new topic
     scanPublisher.publish(cloud);
 
+    // forward to callbacks
+    for(int i = 0; i < callbacks.size(); i++) {
+        callbacks.at(i)(cloud);
+    }
+
+  }
+
+  void registerCallback(t_callback callback) {
+      callbacks.push_back(callback);
+  }
+
+  void deregisterCallback(t_callback callback) {
+      //TODO!
   }
 };
 
 
 //----------------------------------- MAIN -----------------------------------------------
+void callback(const sensor_msgs::PointCloud & cloud) {
+    ROS_INFO("received callback");
+}
+
 int main(int argc, char** argv)
 {
   // init node
@@ -78,6 +98,8 @@ int main(int argc, char** argv)
 
   LaserScanToPointCloud lstopc(n, from_topic, to_topic, tf_base_link);
   ROS_INFO("Transformation running");
+  lstopc.registerCallback(callback);
+
   ros::spin();
   
   return 0;

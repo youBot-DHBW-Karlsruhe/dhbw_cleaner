@@ -19,6 +19,10 @@ public:
 
 	void scanCallback(const sensor_msgs::LaserScan::ConstPtr& scanIn);
 
+    void cbPublishCloud(const sensor_msgs::PointCloud& cloud);
+
+    void registerCloudPublisher();
+
 	void registerCallback(std::string name, t_callback callback);
 	
 	void deregisterCallback(std::string name);
@@ -31,7 +35,6 @@ private:
 	message_filters::Subscriber<sensor_msgs::LaserScan> laserSubscriber;
 	tf::MessageFilter<sensor_msgs::LaserScan> laserFilter;
 	ros::Publisher scanPublisher;
-
 
 };
 

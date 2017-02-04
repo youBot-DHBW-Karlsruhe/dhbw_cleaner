@@ -12,13 +12,16 @@ ObjectFinder::ObjectFinder(ros::NodeHandle n, std::string base_link):
     markerPublisher = n.advertise<visualization_msgs::Marker>("object_finder_marker", 1);
 
     initMarker();
+    ROS_INFO("ObjectFinder: Initialized");
 }
 
 void ObjectFinder::receivePointCloud(const sensor_msgs::PointCloud& pointCloud) {
     geometry_msgs::Point32 nearest = extractNearestPoint(pointCloud.points);
-    if(std::abs(nearest.x) < 0.01 && std::abs(nearest.y) < 0.01 && std::abs(nearest.z) < 0.01) {
+    // is not needed any more?
+    /*if(std::abs(nearest.x) < 0.01 && std::abs(nearest.y) < 0.01 && std::abs(nearest.z) < 0.01) {
         return;
-    }
+    }*/
+
     nearestObjectPublisher.publish(nearest);
 
     // debugging infos

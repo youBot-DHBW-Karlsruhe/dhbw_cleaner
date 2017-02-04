@@ -9,6 +9,7 @@ find_package(catkin REQUIRED COMPONENTS
   sensor_msgs
   geometry_msgs
   laser_geometry
+  laser_assembler
   roscpp
 )
 
@@ -143,6 +144,16 @@ target_link_libraries(object_finder_2d
 	${catkin_LIBRARIES}
 )
 
+add_executable(object_finder_2d_2
+    src/ObjectFinder2.cpp
+)
+add_dependencies(object_finder_2d_2
+    ${catkin_EXPORTED_TARGETS}
+)
+target_link_libraries(object_finder_2d_2
+        ${catkin_LIBRARIES}
+)
+
 
 #############
 ## Install ##
@@ -159,7 +170,7 @@ target_link_libraries(object_finder_2d
 # )
 
 ## Mark executables and/or libraries for installation
-install(TARGETS object_finder_2d
+install(TARGETS object_finder_2d object_finder_2d_2
   ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
   LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
   RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}

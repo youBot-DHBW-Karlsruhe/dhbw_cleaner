@@ -8,4 +8,12 @@
 	<!-- TODO: copy youbot.urdf.xacro -->
 	<param name="robot_description" command="$(find xacro)/xacro.py $(find grab_demo)/robots/youbot.urdf.xacro" />
 
+	<!-- Set transformation parameters -->
+	<param name="laser_scan_topic" type="string" value="/scan"/>
+	<param name="transform_cloud_topic" type="string" value="/laser_point_cloud"/>
+	<param name="base_link" type="string" value="/base_link"/>
+
+	<!-- start object finder node -->
+	<node pkg="object_finder_2d" type="object_finder_2d" name="object_finder_2d" output="screen" />
+
 </launch>

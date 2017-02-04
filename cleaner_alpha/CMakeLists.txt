@@ -6,7 +6,6 @@ project(cleaner_alpha)
 ## is used, also find other catkin packages
 find_package(catkin REQUIRED COMPONENTS
   tf
-  sensor_msgs
   geometry_msgs
   roscpp
 )

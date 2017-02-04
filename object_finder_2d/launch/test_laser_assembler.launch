@@ -1,0 +1,17 @@
+<?xml version="1.0"?>
+<launch>
+
+	<!-- Start the youbot -->
+	<include file="$(find cleaner_alpha)/launch/youbot_driver.launch" />
+
+	<!-- Upload youbot model to parameter server --> 
+	<!-- TODO: copy youbot.urdf.xacro -->
+	<param name="robot_description" command="$(find xacro)/xacro.py $(find grab_demo)/robots/youbot.urdf.xacro" />
+
+	<!-- start laser_assembler -->
+	<node type="laser_scan_assembler" pkg="laser_assembler" name="laser_assembler">
+		<remap from ="cloud" to="cloud" />
+		<param name="max_clouds" type="int" value="200" />
+		<param name="fixed_frame" type="string" value="base_link" />
+	</node>
+</launch>

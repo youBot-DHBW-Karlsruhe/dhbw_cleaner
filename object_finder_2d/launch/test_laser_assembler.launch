@@ -10,8 +10,13 @@
 
 	<!-- start laser_assembler -->
 	<node type="laser_scan_assembler" pkg="laser_assembler" name="laser_assembler">
-		<remap from ="cloud" to="cloud" />
+		<remap from ="cloud" to="laser" />
 		<param name="max_clouds" type="int" value="200" />
 		<param name="fixed_frame" type="string" value="base_link" />
 	</node>
+
+	<!-- start object finder -->
+	<param name="debugging" type="boolean" value="false" />
+	<node type="object_finder_2d" pkg="object_finder_2d" name="object_finder_2d" />
+
 </launch>

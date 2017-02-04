@@ -6,10 +6,12 @@ project(object_finder_2d)
 ## is used, also find other catkin packages
 find_package(catkin REQUIRED COMPONENTS
   tf
+  std_msgs
   sensor_msgs
   geometry_msgs
   laser_geometry
   laser_assembler
+  message_generation
   roscpp
 )
 
@@ -54,11 +56,10 @@ find_package(catkin REQUIRED COMPONENTS
 # )
 
 ## Generate services in the 'srv' folder
-# add_service_files(
-#   FILES
-#   Service1.srv
-#   Service2.srv
-# )
+add_service_files(DIRECTORY srv
+  FILES
+  NearestPoint.srv
+)
 
 ## Generate actions in the 'action' folder
 # add_action_files(
@@ -68,10 +69,11 @@ find_package(catkin REQUIRED COMPONENTS
 # )
 
 ## Generate added messages and services with any dependencies listed here
-# generate_messages(
-#   DEPENDENCIES
-#   std_msgs  # Or other packages containing msgs
-# )
+generate_messages(
+  DEPENDENCIES
+  geometry_msgs
+  std_msgs
+)
 
 ################################################
 ## Declare ROS dynamic reconfigure parameters ##
@@ -103,9 +105,9 @@ find_package(catkin REQUIRED COMPONENTS
 ## CATKIN_DEPENDS: catkin_packages dependent projects also need
 ## DEPENDS: system dependencies of this project that dependent projects also need
 catkin_package(
-#  INCLUDE_DIRS include
+   INCLUDE_DIRS include
 #  LIBRARIES laser_to_cloud
-#  CATKIN_DEPENDS laser_geometry message_filters
+   CATKIN_DEPENDS message_runtime std_msgs geometry_msgs
 #  DEPENDS system_lib
 )
 
@@ -135,9 +137,9 @@ include_directories(
 add_executable(object_finder_2d
     src/PointCloudObjectFinder.cpp
     src/classes/ObjectFinder.cpp
-    src/classes/LaserScanToPointCloud.cpp
 )
 add_dependencies(object_finder_2d
+    ${${PROJECT_NAME}_EXPORTED_TARGETS}
     ${catkin_EXPORTED_TARGETS}
 )
 target_link_libraries(object_finder_2d

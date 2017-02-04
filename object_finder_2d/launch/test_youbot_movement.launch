@@ -1,0 +1,29 @@
+<?xml version="1.0"?>
+<launch>
+
+	<!-- include original youbot driver launch file -->
+	<include file="$(find youbot_driver_ros_interface)/launch/youbot_driver.launch"/>
+
+	<!-- set global parameters -->
+	<param name="robot_description" command="$(find xacro)/xacro.py $(find grab_demo)/robots/youbot.urdf.xacro"/>
+	<param name="laser_scan_topic" type="string" value="/scan"/>
+	<param name="transform_cloud_topic" type="string" value="/laser_point_cloud"/>
+	<param name="base_link" type="string" value="/laser"/>
+
+	<!-- start transformation node --> 
+	<node name="laser_to_cloud" pkg="laser_to_cloud" type="laser_to_cloud" output="screen" />
+
+	<!-- start cleaner node -->
+	<node pkg="cleaner_alpha" type="cleaner" name="cleaner" output="screen" />
+
+	<!-- start sick_tim laser scanner -->
+	<node name="sick_tim551_2050001" pkg="sick_tim" type="sick_tim551_2050001" respawn="false" output="screen">
+		<param name="hostname" type="string" value="169.254.8.76" />
+		<param name="port" type="string" value="2111" />
+		<param name="timelimit" type="int" value="5" />
+ 	</node>
+
+
+	<!-- use rviz to display what's going on-->
+	<node pkg="rviz" name="rviz" type="rviz" args="-d $(find cleaner_alpha)/config/test_youbot_laser_scan.rviz" />
+</launch>

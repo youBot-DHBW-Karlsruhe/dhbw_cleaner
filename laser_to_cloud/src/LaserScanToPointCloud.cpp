@@ -4,10 +4,12 @@
 #include "tf/message_filter.h"
 #include "message_filters/subscriber.h"
 #include "laser_geometry/laser_geometry.h"
+#include "algorithm"
 
 class LaserScanToPointCloud {
 public:
     typedef boost::function<void (const sensor_msgs::PointCloud&)> t_callback;
+    typedef std::map<std::string, t_callback> t_callback_map;
 
 private: 
   
@@ -16,7 +18,7 @@ private:
   message_filters::Subscriber<sensor_msgs::LaserScan> laserSubscriber;
   tf::MessageFilter<sensor_msgs::LaserScan> laserFilter;
   ros::Publisher scanPublisher;
-  std::vector<t_callback> callbacks;
+  t_callback_map callbacks;
 
 public:
 
@@ -33,8 +35,7 @@ public:
     ROS_INFO("LaserScanToPointCloud: initialized all objects");
   }
 
-  void scanCallback(const sensor_msgs::LaserScan::ConstPtr& scanIn)
-  {
+  void scanCallback(const sensor_msgs::LaserScan::ConstPtr& scanIn) {
     laser_geometry::LaserProjection projector;
     sensor_msgs::PointCloud cloud;
     ros::Time timeSource = scanIn->header.stamp + ros::Duration().fromSec(scanIn->ranges.size() * scanIn->time_increment);
@@ -42,14 +43,12 @@ public:
 
     try {
         // quit if no transform is available
-        if(!tfListener.waitForTransform(scanIn->header.frame_id, baseLink, timeSource, timeout))
-        {
+        if(!tfListener.waitForTransform(scanIn->header.frame_id, baseLink, timeSource, timeout)) {
             return;
         }
         projector.transformLaserScanToPointCloud(baseLink, *scanIn, cloud, tfListener);
     }
-    catch (tf::TransformException& e)
-    {
+    catch (tf::TransformException& e) {
         std::cout << e.what();
         ROS_ERROR(e.what());
         return;
@@ -59,18 +58,23 @@ public:
     scanPublisher.publish(cloud);
 
     // forward to callbacks
-    for(int i = 0; i < callbacks.size(); i++) {
-        callbacks.at(i)(cloud);
+    t_callback_map::iterator iter;
+    for(iter=callbacks.begin(); iter!=callbacks.end(); ++iter) {
+        iter->second(cloud);
     }
 
   }
 
-  void registerCallback(t_callback callback) {
-      callbacks.push_back(callback);
+  void registerCallback(std::string name, t_callback callback) {
+      callbacks[name] = callback;
   }
 
-  void deregisterCallback(t_callback callback) {
-      //TODO!
+  void deregisterCallback(std::string name) {
+      callbacks.erase(name);
+      /*std::vector<t_callback>::iterator position = std::find(callbacks.begin(), callbacks.end(), callback);
+      if (position != callbacks.end()) {// element was found
+          callbacks.erase(position);
+      }*/
   }
 };
 
@@ -98,7 +102,7 @@ int main(int argc, char** argv)
 
   LaserScanToPointCloud lstopc(n, from_topic, to_topic, tf_base_link);
   ROS_INFO("Transformation running");
-  lstopc.registerCallback(callback);
+  //lstopc.registerCallback("test", callback);
 
   ros::spin();
   

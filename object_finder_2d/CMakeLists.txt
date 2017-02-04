@@ -8,6 +8,7 @@ find_package(catkin REQUIRED COMPONENTS
   tf
   sensor_msgs
   geometry_msgs
+  laser_geometry
   roscpp
 )
 
@@ -133,6 +134,7 @@ include_directories(
 add_executable(object_finder_2d
     src/PointCloudObjectFinder.cpp
     src/classes/ObjectFinder.cpp
+    src/classes/LaserScanToPointCloud.cpp
 )
 add_dependencies(object_finder_2d
     ${catkin_EXPORTED_TARGETS}

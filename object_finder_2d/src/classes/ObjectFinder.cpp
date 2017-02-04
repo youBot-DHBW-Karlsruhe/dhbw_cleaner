@@ -5,20 +5,17 @@ namespace cleaner {
 ///////////////////////////////////////////////////////////////////////////////
 // public methods
 ///////////////////////////////////////////////////////////////////////////////
-ObjectFinder::ObjectFinder(ros::NodeHandle n, std::string scan_topic, std::string base_link):
-    baseLink(base_link) {
-    ROS_INFO("Entered constructor");
-    scanSubscriber = n.subscribe(scan_topic, 10, &ObjectFinder::scanCallback, this);
+ObjectFinder::ObjectFinder(ros::NodeHandle n, std::string base_link):
+    baseLink(base_link)
+{
+    nearestObjectPublisher = n.advertise<geometry_msgs::Point32>("nearest_object", 5);
     markerPublisher = n.advertise<visualization_msgs::Marker>("object_finder_marker", 1);
-    std::stringstream ss;
-    ss << "nearest_object_" <<  scan_topic.erase(0, 1);
-    nearestObjectPublisher = n.advertise<geometry_msgs::Point32>(ss.str().c_str(), 5);
 
     initMarker();
 }
 
-void ObjectFinder::scanCallback(const sensor_msgs::PointCloud::ConstPtr& pointCloud) {
-    geometry_msgs::Point32 nearest = extractNearestPoint(pointCloud->points);
+void ObjectFinder::receivePointCloud(const sensor_msgs::PointCloud& pointCloud) {
+    geometry_msgs::Point32 nearest = extractNearestPoint(pointCloud.points);
     if(std::abs(nearest.x) < 0.01 && std::abs(nearest.y) < 0.01 && std::abs(nearest.z) < 0.01) {
         return;
     }
@@ -79,7 +76,7 @@ geometry_msgs::Point32 ObjectFinder::extractNearestPoint(sensor_msgs::PointCloud
     }
 
     // TODO: only count points that are there over a specific period of time
-    // "ignore flicker"
+    // "ignore flickering"
 
     // save point
     geometry_msgs::Point32 point;

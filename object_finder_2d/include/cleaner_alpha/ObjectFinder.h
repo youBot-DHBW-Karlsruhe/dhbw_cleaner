@@ -15,7 +15,6 @@ private:
   std::string baseLink;
   geometry_msgs::Point32 nearest;
   visualization_msgs::Marker nearestPointMarker;
-  ros::Subscriber scanSubscriber;
   ros::Publisher markerPublisher;
   ros::Publisher nearestObjectPublisher;
 
@@ -35,9 +34,9 @@ private:
 
 public:
 
-  ObjectFinder(ros::NodeHandle n, std::string scan_topic, std::string base_link);
+  ObjectFinder(ros::NodeHandle n, std::string base_link);
 
-  void scanCallback(const sensor_msgs::PointCloud::ConstPtr& pointCloud);
+  void receivePointCloud(const sensor_msgs::PointCloud& pointCloud);
 
 };
 

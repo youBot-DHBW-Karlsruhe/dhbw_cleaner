@@ -5,7 +5,7 @@
 	<include file="$(find cleaner_alpha)/launch/youbot_driver.launch" />
 
 	<!-- Upload youbot model to parameter server --> 
-	<!-- TODO: copy youbot.urdf.xacro -->
+	<!-- TODO: copy youbot.urdf.xacro to this package -->
 	<param name="robot_description" command="$(find xacro)/xacro.py $(find grab_demo)/robots/youbot.urdf.xacro" />
 
 	<!-- start laser_assembler -->

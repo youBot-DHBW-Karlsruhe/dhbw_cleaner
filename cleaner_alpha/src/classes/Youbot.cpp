@@ -214,7 +214,7 @@ void Youbot::turnBaseDeg(double angleInDeg) {
 }
 
 void Youbot::turnBaseRad(double angleInRad) {
-    double speed = 0.5;
+    //double speed = 0.5;
 
     if(angleInRad == 0) {
         return;

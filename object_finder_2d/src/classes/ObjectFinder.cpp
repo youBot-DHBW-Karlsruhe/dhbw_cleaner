@@ -9,15 +9,18 @@ namespace cleaner {
 ObjectFinder::ObjectFinder(ros::NodeHandle n, std::string cloud_topic, std::string base_link):
     baseLink(base_link)
 {
+    // input service
     ros::service::waitForService("assemble_scans");
-    nearestService = n.advertiseService("nearest_point", &ObjectFinder::nearestPointServiceHandler, this);
     scanSrvClient = n.serviceClient<laser_assembler::AssembleScans>("assemble_scans");
 
-    cloudPublisher = n.advertise<sensor_msgs::PointCloud>(cloud_topic, 5);
-    nearestObjectPublisher = n.advertise<geometry_msgs::Point32>("nearest_object", 5);
-    markerPublisher = n.advertise<visualization_msgs::Marker>("object_finder_marker", 5);
+    // output service
+    nearestService = n.advertiseService("nearest_point", &ObjectFinder::nearestPointServiceHandler, this);
 
+    // for debugging purposes
+    cloudPublisher = n.advertise<sensor_msgs::PointCloud>(cloud_topic, 5);
+    markerPublisher = n.advertise<visualization_msgs::Marker>("object_finder_marker", 5);
     initMarker();
+
     ROS_INFO("ObjectFinder: Initialized");
 }
 
@@ -27,11 +30,14 @@ bool ObjectFinder::nearestPointServiceHandler(object_finder_2d::NearestPoint::Re
      laser_assembler::AssembleScans scanSrv;
      ros::Time now = ros::Time::now();
 
+     // look back one second and call assemble_scans service
      scanSrv.request.begin = now - ros::Duration(1);
      scanSrv.request.end = now;
      if(scanSrvClient.call(scanSrv)) {
-         cloud = scanSrv.response.cloud;
-         nearest = extractNearestPoint(cloud.points);
+         cloud = scanSrv.response.cloud;                // save cloud for debugging publisher
+         nearest = extractNearestPoint(cloud.points);   // save nearest point for debugging
+
+         // return result
          res.point = nearest;
          return true;
      } else {
@@ -79,14 +85,13 @@ void ObjectFinder::initMarker() {
   nearestPointMarker.color.g = 1.0f;
   nearestPointMarker.color.b = 0.0f;
   nearestPointMarker.color.a = 1.0;
-
 }
 
 geometry_msgs::Point32 ObjectFinder::extractNearestPoint(sensor_msgs::PointCloud::_points_type& points, double tol) {
-    // search first valid point
     geometry_msgs::Point32 point;
     int iNearest = 0;
 
+    // search first valid point
     while(invalidPointValue(points[iNearest], tol)) {
         if(iNearest >= points.size() - 1) {
             ROS_ERROR("ObjectFinder: No valid points in point cloud from scan data");
@@ -109,8 +114,9 @@ geometry_msgs::Point32 ObjectFinder::extractNearestPoint(sensor_msgs::PointCloud
 
     // TODO: only count points that are there over a specific period of time
     // "ignore flickering"
+    // --> assemble_scans could be helpful
 
-    // save point
+    // return point
     point.x = points[iNearest].x;
     point.y = points[iNearest].y;
     point.z = points[iNearest].z;
@@ -122,19 +128,19 @@ bool ObjectFinder::invalidPointValue(const geometry_msgs::Point32 &point, double
     if(std::abs(point.z) > tol + 0.06) {
         return true;
     }
-    /*
+
+
     // ignore robot front
+    /*
+    // in case of (0/0) = laser_base_link
     if(std::abs(point.x) < 0.075 && std::abs(point.y) < 0.20) {
         return true;
     }
-    /*
-
-    /*
-<property name="base_size_x" value="0.570"/>
-<property name="base_size_y" value="0.360"/>
-<property name="base_size_z" value="0.100"/>
+        <property name="base_size_x" value="0.570"/>
+        <property name="base_size_y" value="0.360"/>
+        <property name="base_size_z" value="0.100"/>
      */
-    // ignore robot front (in case of (0/0) = base_link)
+    // in case of (0/0) = base_link
     if(std::abs(point.x) < 0.4+tol && std::abs(point.y) < 0.2+tol) {
         return true;
     }

@@ -17,11 +17,12 @@ private:
   geometry_msgs::Point32 nearest;
   sensor_msgs::PointCloud cloud;
   visualization_msgs::Marker nearestPointMarker;
+
   ros::ServiceClient scanSrvClient;
   ros::ServiceServer nearestService;
+
   ros::Publisher cloudPublisher;
   ros::Publisher markerPublisher;
-  ros::Publisher nearestObjectPublisher;
 
   void initMarker();
 

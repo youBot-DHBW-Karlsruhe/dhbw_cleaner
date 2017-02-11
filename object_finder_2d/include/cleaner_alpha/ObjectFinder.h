@@ -26,13 +26,13 @@ private:
 
   void initMarker();
 
-  geometry_msgs::Point32 extractNearestPoint(sensor_msgs::PointCloud::_points_type& points, double tol = 0.02);
+  geometry_msgs::Point32 extractNearestPoint(const sensor_msgs::PointCloud& points, double tol = 0.02);
 
   void printPoint(const geometry_msgs::Point32 point);
 
   void publishMarker(const geometry_msgs::Point32 point);
 
-  bool invalidPointValue(const geometry_msgs::Point32 &point, double tol);
+  bool invalidPointValue(const geometry_msgs::Point32 &point, float intensity, double tol);
 
   double euclDist(const geometry_msgs::Point32 &point);
 

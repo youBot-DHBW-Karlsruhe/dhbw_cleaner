@@ -48,16 +48,17 @@ int main(int argc, char** argv)
 
 
   // assuming that youbot base_link is at (0/0)
-  // target: object at (0/0.7)
+  // target: object at (0/0.5)
   geometry_msgs::Point32 goalPosition;
-  goalPosition.x = 0.7;
+  goalPosition.x = 0.5;
   goalPosition.y = 0;
   geometry_msgs::Point32 p = c.nearestPoint();
-  double tol = 0.02;
+  double tol = 0.03;
 
   // print point coordinates
   std::stringstream ss;
   ss << "Next Point: x=" << p.x << ", y=" << p.y;
+  ROS_INFO_STREAM(ss);
   ROS_INFO(ss.str().c_str());
 
   if(std::abs(p.x) <= tol && std::abs(p.y) <= tol) {
@@ -67,14 +68,14 @@ int main(int argc, char** argv)
   }
 
   // reduce distance and move base directly to the found point
-  p.x = p.x - 0.4; // -40cm (~youbot length/2)
-  p.y = p.y - 0.2; // -20cm (~youbot width/2)
+  p.x = p.x - (goalPosition.x + 0.2);
+  p.y = p.y - goalPosition.y;
   youbot.moveBase(p.x, p.y);
 
   // correct position to fit a good grabbing position iteratively
   bool grabPositionReached = false;
   geometry_msgs::Point32 objectPos = c.nearestPoint();
-  while(!grabPositionReached) {
+  while(!grabPositionReached && ros::ok()) {
       double angle, diagMovement;
 
       if(objectPos.x < 0) {
@@ -96,11 +97,20 @@ int main(int argc, char** argv)
 
       // check position
       objectPos = c.nearestPoint();
-      if(std::abs(objectPos.y) <= tol && objectPos.x >= 0.7-tol && objectPos.x <= 0.7+tol) {
+      if(std::abs(objectPos.y) <= tol && objectPos.x >= goalPosition.x-tol && objectPos.x <= goalPosition.x+tol) {
           grabPositionReached = true;
       }
+      ss << "Next Point: x=" << objectPos.x << ", y=" << objectPos.y << ": reached: " << grabPositionReached;
+      ROS_INFO_STREAM(ss);
+      ROS_INFO(ss.str().c_str());
   }
 
+  ros::Duration(1).sleep();
+
+  // just move slightly forward
+  youbot.moveBase(0.05, 0.0);
+
+  ros::Duration(1).sleep();
   //TODO: insert object detection or position check with cemara here!
 
   // grab the object

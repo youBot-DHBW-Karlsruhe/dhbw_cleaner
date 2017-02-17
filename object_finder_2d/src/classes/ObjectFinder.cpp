@@ -31,11 +31,11 @@ bool ObjectFinder::nearestPointServiceHandler(object_finder_2d::NearestPoint::Re
      ros::Time now = ros::Time::now();
 
      // look back one second and call assemble_scans service
-     scanSrv.request.begin = now - ros::Duration(1);
+     scanSrv.request.begin = now - ros::Duration(0.2);
      scanSrv.request.end = now;
      if(scanSrvClient.call(scanSrv)) {
          cloud = scanSrv.response.cloud;                // save cloud for debugging publisher
-         nearest = extractNearestPoint(cloud.points);   // save nearest point for debugging
+         nearest = extractNearestPoint(cloud);          // save nearest point for debugging
 
          // return result
          res.point = nearest;
@@ -87,12 +87,28 @@ void ObjectFinder::initMarker() {
   nearestPointMarker.color.a = 1.0;
 }
 
-geometry_msgs::Point32 ObjectFinder::extractNearestPoint(sensor_msgs::PointCloud::_points_type& points, double tol) {
+geometry_msgs::Point32 ObjectFinder::extractNearestPoint(const sensor_msgs::PointCloud& cloud, double tol) {
+    sensor_msgs::PointCloud::_points_type points = cloud.points;
+    sensor_msgs::PointCloud::_channels_type channels = cloud.channels;
+    sensor_msgs::ChannelFloat32 intensities;
     geometry_msgs::Point32 point;
     int iNearest = 0;
 
+    // find intensity channel
+    int iChannel = 0;
+    while(!(channels[iChannel].name == "intensity" || channels[iChannel].name == "intensities")) {
+        ROS_ERROR(channels[iChannel].name.c_str());
+        if(iChannel < (channels.size()-1)) {
+            ++iChannel;
+        } else {
+            ROS_ERROR("No intensity channel found!!");
+            return point;
+        }
+    }
+    intensities = channels[iChannel];
+
     // search first valid point
-    while(invalidPointValue(points[iNearest], tol)) {
+    while(invalidPointValue(points[iNearest], intensities.values[iNearest], tol)) {
         if(iNearest >= points.size() - 1) {
             ROS_ERROR("ObjectFinder: No valid points in point cloud from scan data");
             return point;
@@ -103,7 +119,7 @@ geometry_msgs::Point32 ObjectFinder::extractNearestPoint(sensor_msgs::PointCloud
     // check for nearer ones
     for (int i = iNearest+1; i <= points.size(); i++) {
         // ignore invalid points
-        if(invalidPointValue(points[i], tol)) {
+        if(invalidPointValue(points[i], intensities.values[iNearest], tol)) {
             break;
         }
 
@@ -123,12 +139,19 @@ geometry_msgs::Point32 ObjectFinder::extractNearestPoint(sensor_msgs::PointCloud
     return point;
 }
 
-bool ObjectFinder::invalidPointValue(const geometry_msgs::Point32 &point, double tol) {
+bool ObjectFinder::invalidPointValue(const geometry_msgs::Point32 &point, float intensity, double tol) {
+    //TODO: adjust value!!!
+    float threshold = 100; // 0 - 255
+
     // ignore points with z components
     if(std::abs(point.z) > tol + 0.06) {
         return true;
     }
 
+    // ignore points with low intensity
+    if(intensity < threshold) {
+        return true;
+    }
 
     // ignore robot front
     /*
@@ -141,7 +164,7 @@ bool ObjectFinder::invalidPointValue(const geometry_msgs::Point32 &point, double
         <property name="base_size_z" value="0.100"/>
      */
     // in case of (0/0) = base_link
-    if(std::abs(point.x) < 0.4+tol && std::abs(point.y) < 0.2+tol) {
+    if(std::abs(point.x) < 0.35+tol && std::abs(point.y) < 0.3+tol) {
         return true;
     }
 
@@ -154,6 +177,7 @@ void ObjectFinder::printPoint(const geometry_msgs::Point32 point) {
         <<   "x=" << point.x
         << ", y=" << point.y
         << ", z=" << point.z;
+  ROS_INFO_STREAM(ss);
   ROS_INFO(ss.str().c_str());
 }
 

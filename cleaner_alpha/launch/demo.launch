@@ -20,6 +20,7 @@
 	</node>
 
 	<!-- start object finder node -->
+	<param name="debugging" type="bool" value="true" />
 	<node pkg="object_finder_2d" type="object_finder_2d" name="object_finder_2d" output="screen" />
 
 </launch>

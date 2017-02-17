@@ -141,7 +141,7 @@ geometry_msgs::Point32 ObjectFinder::extractNearestPoint(const sensor_msgs::Poin
 
 bool ObjectFinder::invalidPointValue(const geometry_msgs::Point32 &point, float intensity, double tol) {
     //TODO: adjust value!!!
-    float threshold = 120; // 0 - 255
+    float threshold = 100; // 0 - 255
 
     // ignore points with z components
     if(std::abs(point.z) > tol + 0.06) {

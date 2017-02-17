@@ -125,7 +125,7 @@ class Youbot {
         geometry_msgs::Twist stopMsg;
 
         // member
-        actionlib::SimpleActionClient<control_msgs::FollowJointTrajectoryAction> *actionClient;
+        actionlib::SimpleActionClient<control_msgs::FollowJointTrajectoryAction>* actionClient;
         ros::Publisher pubArm;
         ros::Publisher pubBase;
 

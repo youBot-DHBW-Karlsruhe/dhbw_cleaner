@@ -7,11 +7,15 @@ project(cleaner_alpha)
 find_package(catkin REQUIRED COMPONENTS
   tf
   geometry_msgs
+  torque_control
+  actionlib
+  trajectory_generator
+  Eigen
   roscpp
 )
 
 ## System dependencies are found with CMake's conventions
-# find_package(Boost REQUIRED COMPONENTS system)
+#find_package(Boost REQUIRED COMPONENTS system)
 
 
 ## Uncomment this if the package has a setup.py. This macro ensures
@@ -119,8 +123,12 @@ add_executable(cleaner
     src/Cleaner.cpp
     src/classes/Youbot.cpp
     src/classes/Direction.cpp
+    src/classes/Manipulator.cpp
 )
 add_dependencies(cleaner
+    src/classes/Youbot.cpp
+    src/classes/Direction.cpp
+    src/classes/Manipulator.cpp
     ${catkin_EXPORTED_TARGETS}
 )
 target_link_libraries(cleaner

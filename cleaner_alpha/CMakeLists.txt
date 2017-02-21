@@ -10,12 +10,16 @@ find_package(catkin REQUIRED COMPONENTS
   torque_control
   actionlib
   trajectory_generator
+  cmake_modules
+  sensor_msgs
   Eigen
   roscpp
 )
 
 ## System dependencies are found with CMake's conventions
 #find_package(Boost REQUIRED COMPONENTS system)
+find_package(Eigen REQUIRED)
+find_package(Boost REQUIRED)
 
 
 ## Uncomment this if the package has a setup.py. This macro ensures
@@ -132,6 +136,16 @@ add_dependencies(cleaner
     ${catkin_EXPORTED_TARGETS}
 )
 target_link_libraries(cleaner
+	${catkin_LIBRARIES}
+)
+
+add_executable(cleaner2
+    src/Cleaner2.cpp
+)
+add_dependencies(cleaner2
+    ${catkin_EXPORTED_TARGETS}
+)
+target_link_libraries(cleaner2
 	${catkin_LIBRARIES}
 )
 

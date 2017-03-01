@@ -56,10 +56,7 @@ int main(int argc, char** argv)
   double tol = 0.03;
 
   // print point coordinates
-  std::stringstream ss;
-  ss << "Next Point: x=" << p.x << ", y=" << p.y;
-  ROS_INFO_STREAM(ss);
-  ROS_INFO(ss.str().c_str());
+  ROS_INFO_STREAM("Next Point: x=" << p.x << ", y=" << p.y);
 
   if(std::abs(p.x) <= tol && std::abs(p.y) <= tol) {
       ROS_ERROR("Point was nearly (0/0)!!");
@@ -100,10 +97,9 @@ int main(int argc, char** argv)
       if(std::abs(objectPos.y) <= tol && objectPos.x >= goalPosition.x-tol && objectPos.x <= goalPosition.x+tol) {
           grabPositionReached = true;
       }
-      ss << "Next Point: x=" << objectPos.x << ", y=" << objectPos.y << ": reached: " << grabPositionReached;
-      ROS_INFO_STREAM(ss);
-      ROS_INFO(ss.str().c_str());
-  }
+
+      ROS_INFO_STREAM("Next Point: x=" << objectPos.x << ", y=" << objectPos.y << ": reached: " << grabPositionReached);
+}
 
   ros::Duration(1).sleep();
 

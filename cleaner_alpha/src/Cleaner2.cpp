@@ -22,6 +22,7 @@ private:
     double max_vel;
     int keyPointCounter; // beginning at 1 = start position
     bool isJs2Cs;
+    bool valid;
 
     void resetCS2CS(const geometry_msgs::Pose start, double vel) {
         isJs2Cs = false;
@@ -105,6 +106,18 @@ public:
         return positions;
     }
 
+    static const geometry_msgs::Pose createPose(double x, double y, double z, const Eigen::Quaterniond gripperOrientation) {
+        geometry_msgs::Pose kp;
+        kp.position.x = x;
+        kp.position.y = y;
+        kp.position.z = z;
+        kp.orientation.x = gripperOrientation.x();
+        kp.orientation.y = gripperOrientation.y();
+        kp.orientation.z = gripperOrientation.z();
+        kp.orientation.w = gripperOrientation.w();
+        return kp;
+    }
+
     Trajectory(const ros::ServiceClient& cs2csGen, const ros::ServiceClient& js2csGen, const brics_actuator::JointPositions startPosition) {
         cs2csGenerator = cs2csGen;
         js2csGenerator = js2csGen;
@@ -112,12 +125,13 @@ public:
         max_vel = DEFAULT_MAX_VEL;
 
         js2cs.request.start_pos = startPosition;
-        js2cs.request.start_vel = 0.0;
+        js2cs.request.start_vel = checkedVel(0.0);
         js2cs.request.max_acc = max_acc;
         js2cs.request.max_vel = max_vel;
 
-        keyPointCounter == 1;
+        keyPointCounter = 1;
         isJs2Cs = true;
+        valid = false;
     }
 
     Trajectory(const ros::ServiceClient& cs2csGen, const geometry_msgs::Pose startPose) {
@@ -127,8 +141,9 @@ public:
 
         resetCS2CS(startPose, 0.0);
 
-        keyPointCounter == 1;
+        keyPointCounter = 1;
         isJs2Cs = false;
+        valid = false;
     }
 
     void setMaxVel(double vel) {
@@ -137,6 +152,11 @@ public:
 
     void setMaxAcc(double acc) {
         max_acc = checkedAcc(acc);
+    }
+
+    bool createAndAddPose(double x, double y, double z, const Eigen::Quaterniond gripperOrientation, double vel) {
+        geometry_msgs::Pose p = Trajectory::createPose(x, y, z, gripperOrientation);
+        return addPose(p, vel);
     }
 
     bool addPose(const geometry_msgs::Pose p, double vel) {
@@ -148,6 +168,7 @@ public:
             if(callGenerator(js2csGenerator, js2cs)) {
                 // reset cs2cs object to start over at this pose
                 resetCS2CS(p, vel);
+                valid = true;
                 return true;
             }
             return false;
@@ -160,6 +181,7 @@ public:
             if(callGenerator(cs2csGenerator, cs2cs)) {
                 // reset cs2cs object to start over at this pose
                 resetCS2CS(p, vel);
+                valid = true;
                 return true;
             }
             return false;
@@ -207,6 +229,14 @@ public:
 
         return temp;
     }
+
+    int keyPointCount() {
+        return keyPointCounter;
+    }
+
+    bool isValid() {
+        return valid;
+    }
 };
 
 
@@ -251,11 +281,15 @@ class Manipulator {
             delete torqueController;
         }
 
-        Trajectory newCS2CSTrajectory(geometry_msgs::Pose start) {
+        Trajectory newCS2CSTrajectory(double x, double y, double z, const Eigen::Quaterniond gripperOrientation) const {
+            return Trajectory(cs2csGenerator, Trajectory::createPose(x, y, z, gripperOrientation));
+        }
+
+        Trajectory newCS2CSTrajectory(const geometry_msgs::Pose start) const {
             return Trajectory(cs2csGenerator, start);
         }
 
-        Trajectory newSmartTrajectory() {
+        Trajectory newSmartTrajectory() const {
             sensor_msgs::JointState jointState = getJointStates();
             brics_actuator::JointPositions jointPositions = Trajectory::jointStateToJointPositions(jointState);
             return Trajectory(cs2csGenerator, js2csGenerator, jointPositions);
@@ -265,131 +299,172 @@ class Manipulator {
             jointState = *msg;
         }
 
-        sensor_msgs::JointState getJointStates() {
+        sensor_msgs::JointState getJointStates() const {
             ros::spinOnce();
             ros::spinOnce();
             return jointState;
         }
 
-        void testTrajectory() {
-
-            // TODO: use actual arm position as start position
-            // --> needs JS2CS --> see testTrajectoryWithArmPosition()
-            geometry_msgs::Pose start;
-            start.position.x = 0.27;
-            start.position.y = 0.00;
-            start.position.z = 0.05;
-            Eigen::Quaterniond grip(0.6851, 0.1749, 0.6851, -0.1749);
-            start.orientation.x = grip.x();
-            start.orientation.y = grip.y();
-            start.orientation.z = grip.z();
-            start.orientation.w = grip.w();
-
-            // use of a start postion
-            Trajectory trajectory = newCS2CSTrajectory(start);
-
-            geometry_msgs::Pose kp;
-            kp.position.x = 0.27;
-            kp.position.y = 0.00;
-            kp.position.z = -0.1;
-            kp.orientation = start.orientation;
-            if(!trajectory.addPose(kp, 0.0)) {
-                ROS_ERROR("Unable to create trajectory for 2 poses");
-                return;
-            }
-
-
+        bool move(Trajectory trajectory) {
             torque_control::torque_trajectoryGoal goal;
-            goal.trajectory = trajectory.get();
 
-            // ATTENTION: first move arm to start position!!!
-            trajectory_msgs::JointTrajectoryPoint point = goal.trajectory.points.back();
-            double firstPt[5];
-            int i = 0;
-            while (!point.positions.empty()) {
-                firstPt[i] = point.positions.back();
-                i++;
-                point.positions.pop_back();
+            // check trajectory
+            if(!trajectory.isValid()) {
+                ROS_INFO("Trajectory is not valid!");
+                return false;
             }
-            brics_actuator::JointPositions msg;
-            brics_actuator::JointValue val;
-            val.unit = "rad";
-            for(int j=0; j<5;j++) {
-                std::stringstream ss;
-                ss << "arm_joint_" << (j+1);
-                val.joint_uri = ss.str().c_str();
-                val.value = point.positions[j];
-                msg.positions.push_back(val);
-                ROS_ERROR_STREAM("First Point: " << val.joint_uri << " has value " << val.value);
-            }
-            armPublisher.publish(msg);
-            // ATTENTION end
 
-            // execute torque controlled trajectory
+            // delay execution a bit to allow callbacks
             ros::spinOnce();
             ros::Duration(0.5).sleep();
 
+            goal.trajectory = trajectory.get();
             torqueController->sendGoal(goal);
 
             // wait for the action to return
             bool finishedBeforeTimeout = torqueController->waitForResult(ros::Duration(20.0));
             if (finishedBeforeTimeout) {
                 ROS_INFO("Action finished: %s", torqueController->getState().toString().c_str());
+                return true;
             } else {
                 ROS_INFO("Action did not finish before the time out.");
+                return false;
             }
         }
 
-        void testTrajectoryWithArmPosition() {
+        bool moveTo(double x, double y, double z, const Eigen::Quaterniond gripperOrientation) {
+            return moveTo(Trajectory::createPose(x, y, z, gripperOrientation));
+        }
 
-            // use of the actual arm position:
-            Trajectory trajectory = newSmartTrajectory();
-
-            // add a new key point
-            geometry_msgs::Pose kp;
-            kp.position.x = 0.27;
-            kp.position.y = 0.00;
-            kp.position.z = 0.05;
-            Eigen::Quaterniond grip(0.6851, 0.1749, 0.6851, -0.1749);
-            kp.orientation.x = grip.x();
-            kp.orientation.y = grip.y();
-            kp.orientation.z = grip.z();
-            kp.orientation.w = grip.w();
-            if(!trajectory.addPose(kp, Trajectory::DEFAULT_MAX_VEL)) {
-                ROS_ERROR("Unable to create trajectory for 1. key point");
-                return;
-            }
-
-            // add another key point
-            kp.position.x = 0.27;
-            kp.position.y = 0.00;
-            kp.position.z = -0.1;
-            if(!trajectory.addPose(kp, 0.0)) {
-                ROS_ERROR("Unable to create trajectory for 2. key point");
-                return;
-            }
-
-
+        bool moveTo(geometry_msgs::Pose pose) {
             torque_control::torque_trajectoryGoal goal;
-            goal.trajectory = trajectory.get();
 
-            // execute torque controlled trajectory after a while
+            // use actual arm position as start pose
+            Trajectory trajectory = newSmartTrajectory();
+            if(!trajectory.addPose(pose, 0.0)) {
+                ROS_ERROR("Unable to create trajectory for pose");
+                return false;
+            }
+
+            // check trajectory
+            if(!trajectory.isValid()) {
+                ROS_INFO("Trajectory is not valid!");
+                return false;
+            }
+
+            // delay execution a bit to allow callbacks
             ros::spinOnce();
             ros::Duration(0.5).sleep();
 
+            goal.trajectory = trajectory.get();
             torqueController->sendGoal(goal);
 
             // wait for the action to return
             bool finishedBeforeTimeout = torqueController->waitForResult(ros::Duration(20.0));
             if (finishedBeforeTimeout) {
                 ROS_INFO("Action finished: %s", torqueController->getState().toString().c_str());
+                return true;
             } else {
                 ROS_INFO("Action did not finish before the time out.");
+                return false;
             }
+        }
+
+        // FOR TESTING ONLY!!
+        // FIXME: delete
+        void publish(const brics_actuator::JointPositions& msg) {
+            armPublisher.publish(msg);
         }
 
 };
 
+}
+
+//-------------------------------- FUNCTIONS ---------------------------------------------
+void testTrajectory(youbot_proxy::Manipulator& m) {
+    // TODO: use actual arm position as start position
+    // --> needs JS2CS --> see testTrajectoryWithArmPosition()
+
+    // use of a start postion
+    Eigen::Quaterniond grip(0.6851, 0.1749, 0.6851, -0.1749);
+    youbot_proxy::Trajectory trajectory = m.newCS2CSTrajectory(0.27, 0.00, 0.05, grip);
+
+    // second point
+    if(!trajectory.createAndAddPose(0.27, 0.00, -0.10, grip, 0.0)) {
+        ROS_ERROR("Unable to create trajectory for 2 poses");
+        return;
+    }
+
+// ATTENTION: first move arm to start position!!!
+    trajectory_msgs::JointTrajectory traj = trajectory.get();
+    trajectory_msgs::JointTrajectoryPoint point = traj.points.back();
+    double firstPt[5];
+    int i = 0;
+    while (!point.positions.empty()) {
+        firstPt[i] = point.positions.back();
+        i++;
+        point.positions.pop_back();
+    }
+    brics_actuator::JointPositions msg;
+    brics_actuator::JointValue val;
+    val.unit = "rad";
+    for(int j=0; j<5;j++) {
+        std::stringstream ss;
+        ss << "arm_joint_" << (j+1);
+        val.joint_uri = ss.str().c_str();
+        val.value = point.positions[j];
+        msg.positions.push_back(val);
+        ROS_ERROR_STREAM("First Point: " << val.joint_uri << " has value " << val.value);
+    }
+    m.publish(msg);
+// ATTENTION end
+
+
+    if(!m.move(trajectory)) {
+        ROS_ERROR("Trajectory executation failed!");
+    }
+}
+
+void testTrajectoryWithArmPosition(youbot_proxy::Manipulator& m) {
+
+    // use of the actual arm position:
+    youbot_proxy::Trajectory trajectory = m.newSmartTrajectory();
+
+    // add a new key point
+    Eigen::Quaterniond grip(0.6851, 0.1749, 0.6851, -0.1749);
+    geometry_msgs::Pose kp = youbot_proxy::Trajectory::createPose(0.27, 0.00, 0.05, grip);
+    if(!trajectory.addPose(kp, youbot_proxy::Trajectory::DEFAULT_MAX_VEL)) {
+        ROS_ERROR("Unable to create trajectory for 1. key point");
+        return;
+    }
+
+    // add another key point
+    if(!trajectory.createAndAddPose(0.27, 0.00, -0.1, grip, 0.0)) {
+        ROS_ERROR("Unable to create trajectory for 2. key point");
+        return;
+    }
+
+    // move manipulator
+    if(!m.move(trajectory)) {
+        ROS_ERROR("Trajectory executation failed!");
+    }
+}
+
+void testMoveTo(youbot_proxy::Manipulator& m) {
+    Eigen::Quaterniond grip(0.6851, 0.1749, 0.6851, -0.1749);
+
+    // alt. 1:
+    geometry_msgs::Pose pose = youbot_proxy::Trajectory::createPose(0.27, 0.00, 0.05, grip);
+    if(!m.moveTo(pose)) {
+        ROS_ERROR("Trajectory executation failed!");
+    }
+
+    // alt. 2:
+    /*
+    if(!m.moveTo(0.27, 0.00, 0.05, grip)) {
+        ROS_ERROR("Trajectory executation failed!");
+    }
+    */
 }
 
 
@@ -403,5 +478,7 @@ int main(int argc, char** argv)
     youbot_proxy::Manipulator m(n);
     ros::spinOnce();
 
-    m.testTrajectoryWithArmPosition();
+    //testTrajectory(m);
+    testTrajectoryWithArmPosition(m);
+    //testMoveTo(m);
 }

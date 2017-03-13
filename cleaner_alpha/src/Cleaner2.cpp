@@ -58,8 +58,6 @@ private:
     void extractAndStoreTrajectory(trajectory_msgs::JointTrajectory trajectory) {
         trajectory_msgs::JointTrajectoryPoint point;
 
-        // TODO: print all retrieved point position values!!!
-
         while (!trajectory.points.empty()) {
             point = trajectory.points.back();
             trajectory.points.pop_back();
@@ -222,12 +220,14 @@ public:
         */
     }
 
-    trajectory_msgs::JointTrajectory get() {
+    trajectory_msgs::JointTrajectory get(bool stayAvailable = false) {
         ROS_INFO_STREAM("Returning trajectory from " << keyPointCount() << " key points");
         trajectory_msgs::JointTrajectory temp = t;
-        t.joint_names.clear();
-        t.points.clear();
-        keyPointCounter = 1;
+        if(!stayAvailable) {
+            t.joint_names.clear();
+            t.points.clear();
+            keyPointCounter = 1;
+        }
 
         return temp;
     }
@@ -393,16 +393,16 @@ void testTrajectory(youbot_proxy::Manipulator& m) {
 
     // use of a start postion
     Eigen::Quaterniond grip(0.6851, 0.1749, 0.6851, -0.1749);
-    youbot_proxy::Trajectory trajectory = m.newCS2CSTrajectory(0.27, 0.00, 0.05, grip);
+    youbot_proxy::Trajectory trajectory = m.newCS2CSTrajectory(0.29, 0.00, 0.02, grip);
 
     // second point
-    if(!trajectory.createAndAddPose(0.27, 0.00, -0.10, grip, 0.0)) {
+    if(!trajectory.createAndAddPose(0.29, 0.00, -0.10, grip, 0.0)) {
         ROS_ERROR("Unable to create trajectory for 2 poses");
         return;
     }
 
-// ATTENTION: first move arm to start position!!!    
-    trajectory_msgs::JointTrajectory traj = trajectory.get();
+// ATTENTION: first move arm to start position!!!
+    trajectory_msgs::JointTrajectory traj = trajectory.get(true);
     trajectory_msgs::JointTrajectoryPoint point = traj.points.back();
     double firstPt[5];
     int i = 0;
@@ -418,18 +418,17 @@ void testTrajectory(youbot_proxy::Manipulator& m) {
         std::stringstream ss;
         ss << "arm_joint_" << (j+1);
         val.joint_uri = ss.str().c_str();
-        val.value = point.positions[j];
+        val.value = firstPt[j];
         msg.positions.push_back(val);
         ROS_ERROR_STREAM("First Point: " << val.joint_uri << " has value " << val.value);
     }
     m.publish(msg);
 // ATTENTION end
 
-    /*
+
     if(!m.move(trajectory)) {
         ROS_ERROR("Trajectory executation failed!");
     }
-    */
 }
 
 void testTrajectoryWithArmPosition(youbot_proxy::Manipulator& m) {

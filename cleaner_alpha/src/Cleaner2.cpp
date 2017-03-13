@@ -58,6 +58,8 @@ private:
     void extractAndStoreTrajectory(trajectory_msgs::JointTrajectory trajectory) {
         trajectory_msgs::JointTrajectoryPoint point;
 
+        // TODO: print all retrieved point position values!!!
+
         while (!trajectory.points.empty()) {
             point = trajectory.points.back();
             trajectory.points.pop_back();
@@ -221,7 +223,7 @@ public:
     }
 
     trajectory_msgs::JointTrajectory get() {
-        ROS_INFO_STREAM("Returning trajectory from " << (keyPointCounter+1) << " key points");
+        ROS_INFO_STREAM("Returning trajectory from " << keyPointCount() << " key points");
         trajectory_msgs::JointTrajectory temp = t;
         t.joint_names.clear();
         t.points.clear();
@@ -296,11 +298,13 @@ class Manipulator {
         }
 
         void armPositionHandler(const sensor_msgs::JointStateConstPtr& msg) {
+            //FIXME: use only arm positions and ignore wheel joints
             jointState = *msg;
         }
 
         sensor_msgs::JointState getJointStates() const {
             ros::spinOnce();
+            ros::Duration(0.5).sleep();
             ros::spinOnce();
             return jointState;
         }
@@ -317,6 +321,7 @@ class Manipulator {
             // delay execution a bit to allow callbacks
             ros::spinOnce();
             ros::Duration(0.5).sleep();
+            ros::spinOnce();
 
             goal.trajectory = trajectory.get();
             torqueController->sendGoal(goal);
@@ -355,6 +360,7 @@ class Manipulator {
             // delay execution a bit to allow callbacks
             ros::spinOnce();
             ros::Duration(0.5).sleep();
+            ros::spinOnce();
 
             goal.trajectory = trajectory.get();
             torqueController->sendGoal(goal);
@@ -395,7 +401,7 @@ void testTrajectory(youbot_proxy::Manipulator& m) {
         return;
     }
 
-// ATTENTION: first move arm to start position!!!
+// ATTENTION: first move arm to start position!!!    
     trajectory_msgs::JointTrajectory traj = trajectory.get();
     trajectory_msgs::JointTrajectoryPoint point = traj.points.back();
     double firstPt[5];
@@ -419,10 +425,11 @@ void testTrajectory(youbot_proxy::Manipulator& m) {
     m.publish(msg);
 // ATTENTION end
 
-
+    /*
     if(!m.move(trajectory)) {
         ROS_ERROR("Trajectory executation failed!");
     }
+    */
 }
 
 void testTrajectoryWithArmPosition(youbot_proxy::Manipulator& m) {
@@ -478,7 +485,7 @@ int main(int argc, char** argv)
     youbot_proxy::Manipulator m(n);
     ros::spinOnce();
 
-    //testTrajectory(m);
-    testTrajectoryWithArmPosition(m);
+    testTrajectory(m);
+    //testTrajectoryWithArmPosition(m);
     //testMoveTo(m);
 }

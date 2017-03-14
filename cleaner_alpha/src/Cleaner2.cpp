@@ -11,6 +11,8 @@
 #include "Eigen/Dense"
 #include "tf/transform_datatypes.h"
 
+#include <math.h>
+
 namespace youbot_proxy {
 
 class Trajectory {
@@ -421,7 +423,7 @@ void testTrajectory(youbot_proxy::Manipulator& m) {
     // z -> top
     //                                                                      x,   y,   z
     geometry_msgs::Quaternion q = tf::createQuaternionMsgFromRollPitchYaw(0.0, 1.6, 0.0);
-    youbot_proxy::Trajectory trajectory = m.newCS2CSTrajectory(0.29, 0.00, 0.02, q);
+    youbot_proxy::Trajectory trajectory = m.newCS2CSTrajectory(0.29, 0.00, 0.05, q);
 
     // second point
     if(!trajectory.createAndAddPose(0.29, 0.00, -0.10, q, 0.0)) {
@@ -456,6 +458,9 @@ void testTrajectory(youbot_proxy::Manipulator& m) {
     ros::spinOnce();
     m.publish(msg);
     ros::Duration(0.5).sleep();
+    ros::spinOnce();
+    m.publish(msg);
+    ros::Duration(1).sleep();
     ros::spinOnce();
 // ATTENTION end
 

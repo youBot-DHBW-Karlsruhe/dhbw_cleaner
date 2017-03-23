@@ -30,9 +30,9 @@ class IK {
 
 public:
 
-    IK(ros::NodeHandle n, std::string robot_description, std::string base_frame, std::string tip_frame):
+    IK(ros::NodeHandle n, std::string robot_description, std::string base_frame, std::string tip_frame, bool isDebug):
         NUM_JOINTS(5),
-        debug(false)
+        debug(isDebug)
     {
 
         // get joint descriptions from robot model
@@ -66,6 +66,12 @@ public:
         ik.reset(new youbot_arm_kinematics::InverseKinematics(lower_limits, upper_limits));
 
         if(debug) ROS_INFO("IK solver initialized");
+    }
+
+    IK(ros::NodeHandle n, std::string robot_description, std::string base_frame, std::string tip_frame):
+        NUM_JOINTS(5)
+    {
+        IK(n, robot_description, base_frame, tip_frame, false);
     }
 
     virtual ~IK(){}
@@ -269,7 +275,7 @@ int main(int argc, char** argv)
   ros::init(argc, argv, "cleaner");
   ros::NodeHandle n;
 
-  IK ik(n, "/robot_description", "arm_link_0", "arm_link_5");
+  IK ik(n, "/robot_description", "arm_link_0", "arm_link_5", true);
 
   // orientation of the gripper relativ to the base coordinate system:
   // x -> front
@@ -278,7 +284,7 @@ int main(int argc, char** argv)
   //                                                                      x,   y,   z
   //geometry_msgs::Quaternion q = tf::createQuaternionMsgFromRollPitchYaw(0.0, 1.6, 0.0);
   geometry_msgs::Quaternion q;
-  geometry_msgs::Pose p = ik.createPose(0.057, 0.0, 0.534, q);
+  geometry_msgs::Pose p = ik.createPose(0.27, 0.00, 0.35, q);
   std::vector<double> joints(5);
   joints[0] = 1.0;
   joints[1] = 1.0;
@@ -287,19 +293,22 @@ int main(int argc, char** argv)
   joints[4] = 1.0;
   std::vector<double> solution;
 
+  /*
   for(double x=-0.7; x<=0.7; x+=0.01) {
       for(double y=-0.7; y<=0.7; y+=0.01) {
           for(double z=-1.0; z<=1; z+=0.01) {
               p = ik.createPose(x, y, z, q);
               int res = ik.solveClosestIK(p, joints, solution);
-              ROS_INFO_STREAM("" << x << "/" << y << "/" << z << ": " << res);
+              if(res != 0)
+                ROS_INFO_STREAM("" << x << "/" << y << "/" << z << ": " << res);
           }
-          break;
+          //break;
       }
-      break;
-  }
+      //break;
+  }*/
 
-  /*bool res = ik.solveClosestIK(p, joints, solution);
+
+  bool res = ik.solveClosestIK(p, joints, solution);
 
   if(!res) {
       ROS_ERROR("No solution found!");
@@ -313,7 +322,7 @@ int main(int argc, char** argv)
                                 << solution[1] << " "
                                 << solution[2] << " "
                                 << solution[3] << " "
-                                << solution[4] << " ");*/
+                                << solution[4] << " ");
 
   return 0;
 }

@@ -275,16 +275,20 @@ int main(int argc, char** argv)
   ros::init(argc, argv, "cleaner");
   ros::NodeHandle n;
 
-  IK ik(n, "/robot_description", "arm_link_0", "arm_link_5", true);
+  IK ik(n, "/robot_description", "arm_link_0", "arm_link_5", false);
 
   // orientation of the gripper relativ to the base coordinate system:
   // x -> front
   // y -> left
   // z -> top
+  // angle in radiant
+  double rx = 0.0;
+  double ry = 3/4 * M_PI;
+  double rz = 0.0;
   //                                                                      x,   y,   z
-  //geometry_msgs::Quaternion q = tf::createQuaternionMsgFromRollPitchYaw(0.0, 1.6, 0.0);
-  geometry_msgs::Quaternion q;
-  geometry_msgs::Pose p = ik.createPose(0.27, 0.00, 0.35, q);
+  geometry_msgs::Quaternion q = tf::createQuaternionMsgFromRollPitchYaw( rx,  ry,  rz);
+  //geometry_msgs::Quaternion q;
+  geometry_msgs::Pose p = ik.createPose(0.34, 0.00, 0.30, q);
   std::vector<double> joints(5);
   joints[0] = 1.0;
   joints[1] = 1.0;
@@ -293,19 +297,22 @@ int main(int argc, char** argv)
   joints[4] = 1.0;
   std::vector<double> solution;
 
-  /*
+/*
+  std::cout << "Positions for Orientation: Roll=" << rx << ", Pitch=" << ry << ", Yaw=" << rz << std::endl;
+  std::cout << "----------------------------------------------------------------------" << std::endl << std::endl;
   for(double x=-0.7; x<=0.7; x+=0.01) {
       for(double y=-0.7; y<=0.7; y+=0.01) {
           for(double z=-1.0; z<=1; z+=0.01) {
               p = ik.createPose(x, y, z, q);
               int res = ik.solveClosestIK(p, joints, solution);
               if(res != 0)
-                ROS_INFO_STREAM("" << x << "/" << y << "/" << z << ": " << res);
+                  std::cout << x << "/" << y << "/" << z << std::endl;
           }
-          //break;
+          if(!ros::ok()) {
+              return 1;
+          }
       }
-      //break;
-  }*/
+  }/**/
 
 
   bool res = ik.solveClosestIK(p, joints, solution);
@@ -322,7 +329,7 @@ int main(int argc, char** argv)
                                 << solution[1] << " "
                                 << solution[2] << " "
                                 << solution[3] << " "
-                                << solution[4] << " ");
+                                << solution[4] << " ");/**/
 
   return 0;
 }

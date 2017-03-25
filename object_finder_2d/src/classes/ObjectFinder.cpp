@@ -30,7 +30,7 @@ bool ObjectFinder::nearestPointServiceHandler(object_finder_2d::NearestPoint::Re
      laser_assembler::AssembleScans scanSrv;
      ros::Time now = ros::Time::now();
 
-     // look back one second and call assemble_scans service
+     // look back 0.2 second and call assemble_scans service
      scanSrv.request.begin = now - ros::Duration(0.2);
      scanSrv.request.end = now;
      if(scanSrvClient.call(scanSrv)) {
@@ -77,9 +77,9 @@ void ObjectFinder::initMarker() {
   nearestPointMarker.pose.orientation.z = 0.0;
   nearestPointMarker.pose.orientation.w = 1.0;
 
-  nearestPointMarker.scale.x = 0.15;
-  nearestPointMarker.scale.y = 0.15;
-  nearestPointMarker.scale.z = 0.15;
+  nearestPointMarker.scale.x = 0.05;
+  nearestPointMarker.scale.y = 0.05;
+  nearestPointMarker.scale.z = 0.05;
 
   nearestPointMarker.color.r = 1.0f;
   nearestPointMarker.color.g = 1.0f;
@@ -97,11 +97,10 @@ geometry_msgs::Point32 ObjectFinder::extractNearestPoint(const sensor_msgs::Poin
     // find intensity channel
     int iChannel = 0;
     while(!(channels[iChannel].name == "intensity" || channels[iChannel].name == "intensities")) {
-        ROS_ERROR(channels[iChannel].name.c_str());
         if(iChannel < (channels.size()-1)) {
             ++iChannel;
         } else {
-            ROS_ERROR("No intensity channel found!!");
+            ROS_ERROR("ObjectFinder: No intensity channel found!!");
             return point;
         }
     }
@@ -141,7 +140,8 @@ geometry_msgs::Point32 ObjectFinder::extractNearestPoint(const sensor_msgs::Poin
 
 bool ObjectFinder::invalidPointValue(const geometry_msgs::Point32 &point, float intensity, double tol) {
     //TODO: adjust value!!!
-    float threshold = 100; // 0 - 255
+    //float threshold = 100; // 0 - 255
+    float threshold = 25;
 
     // ignore points with z components
     if(std::abs(point.z) > tol + 0.06) {
@@ -164,6 +164,7 @@ bool ObjectFinder::invalidPointValue(const geometry_msgs::Point32 &point, float 
         <property name="base_size_z" value="0.100"/>
      */
     // in case of (0/0) = base_link
+    // old values: abs(x) < 0.35+tol && abs(y) < 0.3+tol
     if(std::abs(point.x) < 0.35+tol && std::abs(point.y) < 0.3+tol) {
         return true;
     }
@@ -172,13 +173,10 @@ bool ObjectFinder::invalidPointValue(const geometry_msgs::Point32 &point, float 
 }
 
 void ObjectFinder::printPoint(const geometry_msgs::Point32 point) {
-  std::stringstream ss;
-  ss << "Nearest point: "
-        <<   "x=" << point.x
-        << ", y=" << point.y
-        << ", z=" << point.z;
-  ROS_INFO_STREAM(ss);
-  ROS_INFO(ss.str().c_str());
+  ROS_INFO_STREAM("Nearest point: "
+                  <<   "x=" << point.x
+                  << ", y=" << point.y
+                  << ", z=" << point.z);
 }
 
 void ObjectFinder::publishMarker(const geometry_msgs::Point32 point) {
@@ -196,7 +194,7 @@ void ObjectFinder::publishMarker(const geometry_msgs::Point32 point) {
 
 double ObjectFinder::euclDist(const geometry_msgs::Point32 &point) {
     // z is 0
-    return std::sqrt(std::abs(std::pow(point.x, 2) + std::pow(point.y, 2)));
+    return std::sqrt(std::pow(point.x-0.15, 2) + std::pow(point.y, 2));
 }
 
 }

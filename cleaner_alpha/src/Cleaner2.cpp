@@ -192,43 +192,16 @@ public:
             }
             return false;
         }
-
-        /*
-         old implementation:
-            // use cs2cs
-            cs2cs.request.end_pos = p;
-            cs2cs.request.end_vel = checkedVel(vel);
-
-            // generate trajectory points and add to trajectory
-            if(cs2csGenerator.call(cs2cs)) {
-                feasible = cs2cs.response.feasible;
-                if(feasible) {
-                    trajectory_msgs::JointTrajectory temp = cs2cs.response.trajectory;
-                    trajectory_msgs::JointTrajectoryPoint point;
-                    while (!temp.points.empty()) {
-                        point = temp.points.back();
-                        temp.points.pop_back();
-                        t.points.insert(t.points.begin(), point);
-                    }
-                    t.joint_names = temp.joint_names;
-                    // reset cs2cs object to start over at this pose
-                    resetCS2CS(p, vel);
-
-                    return true;
-                } else {
-                    ROS_ERROR("Could not add point to trajectory. Trajectory not feasible!");
-                    return false;
-                }
-            } else {
-                ROS_ERROR("Could not add point to trajectory. Call to trajectory generator failed!");
-                return false;
-            }
-        */
     }
 
     trajectory_msgs::JointTrajectory get(bool stayAvailable = false) {
-        ROS_INFO_STREAM("Returning trajectory from " << keyPointCount() << " key points");
         trajectory_msgs::JointTrajectory temp = t;
+        if(!isValid()) {
+            ROS_ERROR("Trajectory not valid!");
+            return temp;
+        }
+
+        ROS_INFO_STREAM("Returning trajectory from " << keyPointCount() << " key points");
         if(!stayAvailable) {
             t.joint_names.clear();
             t.points.clear();
@@ -514,11 +487,21 @@ void testTrajectory(ros::NodeHandle node, youbot_proxy::Manipulator& m) {
     // y -> left
     // z -> top
     //                                                                      x,   y,   z
-    geometry_msgs::Quaternion q = tf::createQuaternionMsgFromRollPitchYaw(0.0, 1.6, 0.0);
-    youbot_proxy::Trajectory trajectory = m.newCS2CSTrajectory(0.29, 0.00, 0.05, q);
+    geometry_msgs::Quaternion q = tf::createQuaternionMsgFromRollPitchYaw(0.0, 0.0, 0.2);
+    //q.x = 0.5; q.y = 0.5; q.z = 0.5; q.w = 0.5;
+    Eigen::Quaterniond grip(0.6851, 0.1749, 0.6851, -0.1749);
+    q.x = grip.x();
+    q.y = grip.y();
+    q.z = grip.z();
+    q.w = grip.w();
+
+    tf::Quaternion quat;
+    tf::quaternionMsgToTF(q, quat);
+    ROS_INFO_STREAM("Axis: " << quat.getAxis().getX() << "/" << quat.getAxis().getY() << "/" << quat.getAxis().getZ() << " Angle: " << quat.getAngle());
+    youbot_proxy::Trajectory trajectory = m.newCS2CSTrajectory(0.12, 0.25, 0.05, q);
 
     // second point
-    if(!trajectory.createAndAddPose(0.29, 0.00, -0.10, q, 0.0)) {
+    if(!trajectory.createAndAddPose(-0.12, 0.25, 0.05, q, 0.0)) {
         ROS_ERROR("Unable to create trajectory for 2 poses");
         return;
     }
@@ -545,19 +528,6 @@ void testTrajectory(ros::NodeHandle node, youbot_proxy::Manipulator& m) {
         msg.positions.push_back(val);
         ROS_ERROR_STREAM("First Point: " << val.joint_uri << " has value " << val.value);
     }
-    /*
-    m.publish(msg);
-    ros::Duration(0.5).sleep();
-    ros::spinOnce();
-    m.publish(msg);
-    ros::Duration(0.5).sleep();
-    ros::spinOnce();
-    m.publish(msg);
-    ros::Duration(1).sleep();
-    ros::spinOnce();
-    */
-    ros::Duration(1).sleep();
-    ros::spinOnce();
     moveToStartPose(node, m, msg);
     ros::Duration(1).sleep();
     ros::spinOnce();

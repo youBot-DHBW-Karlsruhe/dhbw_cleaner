@@ -14,6 +14,7 @@ find_package(catkin REQUIRED COMPONENTS
   sensor_msgs
   Eigen
   roscpp
+  cmake_modules
 )
 
 ## System dependencies are found with CMake's conventions

@@ -672,7 +672,7 @@ bool grabObjectAt(const geometry_msgs::Pose& pose, youbot_proxy::Manipulator& m)
     js2jsTraj = trajectoryGenJs.get();
 
     // correct orientation of gripper with yaw
-    correctGripperOrientation(yaw, cs2csTraj);
+    correctGripperOrientation(yaw, js2jsTraj);
 
 
     ///////////////////////////////////////////////////////////////////////////

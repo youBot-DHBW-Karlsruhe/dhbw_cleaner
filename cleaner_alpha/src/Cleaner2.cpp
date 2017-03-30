@@ -563,38 +563,44 @@ brics_actuator::JointPositions extractFirstPointPositions(const trajectory_msgs:
 }
 
 void correctGripperOrientation(double yaw, trajectory_msgs::JointTrajectory& traj) {
-    const int JOINT5 = 4;
+    ROS_INFO("Correcting gripper orientation ...");
+    ROS_INFO("   init phase");
+    const int JOINT_5 = 4;
     // positions
     double n = traj.points.size();
-    double origPos = traj.points[0].positions[JOINT5];
+    double origPos = traj.points[0].positions[JOINT_5];
     double goalPos = yaw;
     double incPos = (goalPos - origPos) / n;
     // velocities
-    double origVel = traj.points[0].velocities[JOINT5];
-    double goalVel = traj.points[n].velocities[JOINT5];
+    double origVel = traj.points[0].velocities[JOINT_5];
+    double goalVel = traj.points[n-1].velocities[JOINT_5];
     double incVel = (goalVel - origVel) / n;
     // accelerations
-    double origAcc = traj.points[0].accelerations[JOINT5];
-    double goalAcc = traj.points[n].accelerations[JOINT5];
+    double origAcc = traj.points[0].accelerations[JOINT_5];
+    double goalAcc = traj.points[n-1].accelerations[JOINT_5];
     double incAcc = (goalAcc - origAcc) / n;
 
     // effort?
 
     // interpolate positions
+    ROS_INFO("   interpolation phase");
     for(int i=0; i<n-1; i++) {
         trajectory_msgs::JointTrajectoryPoint* point = &traj.points[i];
-        point->positions[JOINT5] = origPos + i * incPos;
-        point->velocities[JOINT5] = origVel + i * incVel;
-        point->accelerations[JOINT5] = origAcc + i * incAcc;
+        point->positions[JOINT_5] = origPos + i * incPos;
+        point->velocities[JOINT_5] = origVel + i * incVel;
+        point->accelerations[JOINT_5] = origAcc + i * incAcc;
         // effort?
     }
 
     // end state:
+    ROS_INFO("   end phase");
     trajectory_msgs::JointTrajectoryPoint* lastPoint = &traj.points[n-1];
-    lastPoint->positions[JOINT5] = goalPos;
-    lastPoint->velocities[JOINT5] = goalVel;
-    lastPoint->accelerations[JOINT5] = goalAcc;
+    lastPoint->positions[JOINT_5] = goalPos;
+    lastPoint->velocities[JOINT_5] = goalVel;
+    lastPoint->accelerations[JOINT_5] = goalAcc;
     // effort?
+
+    ROS_INFO("... finished.");
 }
 
 bool grabObjectAt(const geometry_msgs::Pose& pose, youbot_proxy::Manipulator& m) {
@@ -640,12 +646,12 @@ bool grabObjectAt(const geometry_msgs::Pose& pose, youbot_proxy::Manipulator& m)
     // create linear trajectory
     // cs2cs
     trajectory_msgs::JointTrajectory cs2csTraj;
-    youbot_proxy::CSTrajectoryGenerator trajectoryGen = m.getCSTrajectoryGenerator(armStartPosition);
-    if(!trajectoryGen.addPose(armGoalPosition)) {
+    youbot_proxy::CSTrajectoryGenerator trajectoryGenCS = m.getCSTrajectoryGenerator(armStartPosition);
+    if(!trajectoryGenCS.addPose(armGoalPosition)) {
         ROS_ERROR("Could not create linear grab trajectory");
         return false;
     }
-    cs2csTraj = trajectoryGen.get();
+    cs2csTraj = trajectoryGenCS.get();
 
 
     // extract first point
@@ -658,7 +664,12 @@ bool grabObjectAt(const geometry_msgs::Pose& pose, youbot_proxy::Manipulator& m)
     // create trajectory from current joint position to first position of linear trajectory
     // js2js
     trajectory_msgs::JointTrajectory js2jsTraj;
-    // TODO:
+    youbot_proxy::JSTrajectoryGenerator trajectoryGenJs = m.getJSTrajectoryGenerator(currentJointPositions);
+    if(!trajectoryGenJs.addPosition(firstJointPositions)) {
+        ROS_ERROR("Could not create trajectory to first position");
+        return false;
+    }
+    js2jsTraj = trajectoryGenJs.get();
 
     // correct orientation of gripper with yaw
     correctGripperOrientation(yaw, cs2csTraj);
@@ -735,10 +746,10 @@ void testTrajectory(ros::NodeHandle node, youbot_proxy::Manipulator& m) {
 // ATTENTION end
 
     // check and correct gripper orientation (yaw)
-    /*
+
     double yaw = M_PI_2; // PI/2: gripper is parallel to x
     correctGripperOrientation(yaw, traj);
-    */
+
 
     ROS_INFO("Moving along trajectory");
     if(!m.move(traj)) {

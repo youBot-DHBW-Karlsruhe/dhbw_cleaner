@@ -18,62 +18,14 @@
 
 namespace youbot_proxy {
 
-class Trajectory {
-private:
-    ros::ServiceClient cs2csGenerator;
-    ros::ServiceClient js2csGenerator;
-
-    trajectory_generator::CStoCS cs2cs;
-    trajectory_generator::JStoCS js2cs;
+class TrajectoryGenerator {
+protected:
     trajectory_msgs::JointTrajectory t;
-
     double max_acc;
     double max_vel;
-    int keyPointCounter; // beginning at 1 = start position
-    bool isJs2Cs;
+
     bool valid;
-
-    void resetCS2CS(const geometry_msgs::Pose start, double vel) {
-        isJs2Cs = false;
-        ++keyPointCounter;
-
-        cs2cs.request.start_pos = start;
-        cs2cs.request.start_vel = checkedVel(vel);
-        cs2cs.request.max_acc = max_acc;
-        cs2cs.request.max_vel = max_vel;
-    }
-
-    template <typename T> // T is either   JStoCS or CStoCS   of namespace trajectory_generator
-    bool callGenerator(ros::ServiceClient& generator, T& msg) {     // !! no const
-        BOOST_STATIC_ASSERT(((boost::is_base_of<trajectory_generator::JStoCS, T>::value) || (boost::is_base_of<trajectory_generator::CStoCS, T>::value))); //Yes, the double parentheses are needed, otherwise the comma will be seen as macro argument separator
-
-        bool feasible = false;
-        if(generator.call(msg)) {
-            feasible = msg.response.feasible;
-            if(feasible) {
-                // extract trajectory points and append them to member 't'
-                extractAndStoreTrajectory(msg.response.trajectory);
-                return true;
-            } else {
-                ROS_ERROR("Could not add point to trajectory. Trajectory not feasible!");
-                return false;
-            }
-        } else {
-            ROS_ERROR("Could not add point to trajectory. Call to trajectory generator failed!");
-            return false;
-        }
-    }
-
-    void extractAndStoreTrajectory(trajectory_msgs::JointTrajectory trajectory) {
-        trajectory_msgs::JointTrajectoryPoint point;
-
-        while (!trajectory.points.empty()) {
-            point = trajectory.points.back();
-            trajectory.points.pop_back();
-            t.points.insert(t.points.begin(), point);
-        }
-        t.joint_names = trajectory.joint_names;
-    }
+    int keyPointCounter; // beginning at 1 = start position
 
     double checkedVel(double vel) {
         if(vel > 0.199999) {
@@ -95,6 +47,37 @@ private:
         }
     }
 
+    void extractAndStoreTrajectory(trajectory_msgs::JointTrajectory trajectory) {
+        trajectory_msgs::JointTrajectoryPoint point;
+
+        while (!trajectory.points.empty()) {
+            point = trajectory.points.back();
+            trajectory.points.pop_back();
+            t.points.insert(t.points.begin(), point);
+        }
+        t.joint_names = trajectory.joint_names;
+    }
+
+    template <typename T> // T is either   JStoJS or CStoCS   of namespace trajectory_generator
+    bool callGenerator(ros::ServiceClient& generator, T& msg) {     // !! no const
+        BOOST_STATIC_ASSERT(((boost::is_base_of<trajectory_generator::JStoJS, T>::value) || (boost::is_base_of<trajectory_generator::CStoCS, T>::value))); //Yes, the double parentheses are needed, otherwise the comma will be seen as macro argument separator
+
+        bool feasible = false;
+        if(generator.call(msg)) {
+            feasible = msg.response.feasible;
+            if(feasible) {
+                // extract trajectory points and append them to member 't'
+                extractAndStoreTrajectory(msg.response.trajectory);
+                return true;
+            } else {
+                ROS_ERROR("Could not add point to trajectory. Trajectory not feasible!");
+                return false;
+            }
+        } else {
+            ROS_ERROR("Could not add point to trajectory. Call to trajectory generator failed!");
+            return false;
+        }
+    }
 
 public:
     static const double DEFAULT_MAX_VEL = 0.05;
@@ -124,74 +107,12 @@ public:
         return kp;
     }
 
-    Trajectory(const ros::ServiceClient& cs2csGen, const ros::ServiceClient& js2csGen, const brics_actuator::JointPositions startPosition) {
-        cs2csGenerator = cs2csGen;
-        js2csGenerator = js2csGen;
-        max_acc = DEFAULT_MAX_ACC;
-        max_vel = DEFAULT_MAX_VEL;
-
-        js2cs.request.start_pos = startPosition;
-        js2cs.request.start_vel = checkedVel(0.0);
-        js2cs.request.max_acc = max_acc;
-        js2cs.request.max_vel = max_vel;
-
-        keyPointCounter = 1;
-        isJs2Cs = true;
-        valid = false;
-    }
-
-    Trajectory(const ros::ServiceClient& cs2csGen, const geometry_msgs::Pose startPose) {
-        cs2csGenerator = cs2csGen;
-        max_acc = DEFAULT_MAX_ACC;
-        max_vel = DEFAULT_MAX_VEL;
-
-        resetCS2CS(startPose, 0.0);
-
-        keyPointCounter = 1;
-        isJs2Cs = false;
-        valid = false;
-    }
-
     void setMaxVel(double vel) {
         max_vel = checkedVel(vel);
     }
 
     void setMaxAcc(double acc) {
         max_acc = checkedAcc(acc);
-    }
-
-    bool createAndAddPose(double x, double y, double z, const geometry_msgs::Quaternion gripperOrientation, double vel) {
-        geometry_msgs::Pose p = Trajectory::createPose(x, y, z, gripperOrientation);
-        return addPose(p, vel);
-    }
-
-    bool addPose(const geometry_msgs::Pose p, double vel = 0.) {
-        if(isJs2Cs) {
-            // use js2cs
-            js2cs.request.end_pos = p;
-            js2cs.request.end_vel = checkedVel(vel);
-
-            if(callGenerator(js2csGenerator, js2cs)) {
-                // reset cs2cs object to start over at this pose
-                resetCS2CS(p, vel);
-                valid = true;
-                return true;
-            }
-            return false;
-
-        } else {
-            // use cs2cs
-            cs2cs.request.end_pos = p;
-            cs2cs.request.end_vel = checkedVel(vel);
-
-            if(callGenerator(cs2csGenerator, cs2cs)) {
-                // reset cs2cs object to start over at this pose
-                resetCS2CS(p, vel);
-                valid = true;
-                return true;
-            }
-            return false;
-        }
     }
 
     trajectory_msgs::JointTrajectory get(bool stayAvailable = false) {
@@ -220,6 +141,168 @@ public:
     }
 };
 
+class JSTrajectoryGenerator: public TrajectoryGenerator {
+private:
+    ros::ServiceClient js2jsGenerator;
+
+    trajectory_generator::JStoJS js2js;
+
+    brics_actuator::JointVelocities createJointVelocities(double vel) {
+        brics_actuator::JointVelocities velocityMsg;
+        brics_actuator::JointValue v;
+        double checkedVelocity = checkedVel(vel);
+
+        v.unit = "s^-1 rad";
+        v.value = checkedVelocity;
+        for(int j=0; j<5; j++) {
+            std::stringstream st;
+            st << "arm_joint_" << (j+1);
+            v.joint_uri = st.str().c_str();
+            velocityMsg.velocities.push_back(v);
+        }
+
+        return velocityMsg;
+    }
+
+    void resetJS2JS(const brics_actuator::JointPositions start, double vel) {
+        ++keyPointCounter;
+
+        brics_actuator::JointVelocities velocity = createJointVelocities(vel);
+
+        js2js.request.start_pos = start;
+        js2js.request.start_vel = velocity;
+        js2js.request.max_acc = max_acc;
+        js2js.request.max_vel = max_vel;
+    }
+
+    bool checkPositions(const brics_actuator::JointPositions& pos) {
+        return pos.positions.size() != 5;
+    }
+
+public:
+
+    JSTrajectoryGenerator(const ros::ServiceClient& js2jsGen, const brics_actuator::JointPositions startPosition) {
+        js2jsGenerator = js2jsGen;
+        max_acc = TrajectoryGenerator::DEFAULT_MAX_ACC;
+        max_vel = TrajectoryGenerator::DEFAULT_MAX_VEL;
+
+        if(checkPositions(startPosition)) {
+            ROS_WARN("Empty start position");
+        }
+        resetJS2JS(startPosition, 0.0);
+
+        keyPointCounter = 1;
+        valid = false;
+    }
+
+    bool addPosition(const brics_actuator::JointPositions p, double vel = 0.) {
+        if(checkPositions(p)) {
+            ROS_WARN("Empty position");
+            return false;
+        }
+        // use cs2cs
+        js2js.request.end_pos = p;
+        js2js.request.end_vel = createJointVelocities(vel);
+
+        if(callGenerator(js2jsGenerator, js2js)) {
+            // reset cs2cs object to start over at this pose
+            resetJS2JS(p, vel);
+            valid = true;
+            return true;
+        }
+        return false;
+    }
+};
+
+
+class CSTrajectoryGenerator: public TrajectoryGenerator {
+private:
+    ros::ServiceClient cs2csGenerator;
+    trajectory_generator::CStoCS cs2cs;
+
+    void resetCS2CS(const geometry_msgs::Pose start, double vel) {
+        ++keyPointCounter;
+
+        cs2cs.request.start_pos = start;
+        cs2cs.request.start_vel = checkedVel(vel);
+        cs2cs.request.max_acc = max_acc;
+        cs2cs.request.max_vel = max_vel;
+    }
+
+    /*
+    template <typename T> // T is either   JStoCS or CStoCS   of namespace trajectory_generator
+    bool callGenerator(ros::ServiceClient& generator, T& msg) {     // !! no const
+        BOOST_STATIC_ASSERT(((boost::is_base_of<trajectory_generator::JStoCS, T>::value) || (boost::is_base_of<trajectory_generator::CStoCS, T>::value))); //Yes, the double parentheses are needed, otherwise the comma will be seen as macro argument separator
+
+        bool feasible = false;
+        if(generator.call(msg)) {
+            feasible = msg.response.feasible;
+            if(feasible) {
+                // extract trajectory points and append them to member 't'
+                extractAndStoreTrajectory(msg.response.trajectory);
+                return true;
+            } else {
+                ROS_ERROR("Could not add point to trajectory. Trajectory not feasible!");
+                return false;
+            }
+        } else {
+            ROS_ERROR("Could not add point to trajectory. Call to trajectory generator failed!");
+            return false;
+        }
+    }
+    */
+    /*
+    bool callGenerator(trajectory_generator::CStoCS& msg) {     // !! no const
+        bool feasible = false;
+        if(cs2csGenerator.call(msg)) {
+            feasible = msg.response.feasible;
+            if(feasible) {
+                // extract trajectory points and append them to member 't'
+                extractAndStoreTrajectory(msg.response.trajectory);
+                return true;
+            } else {
+                ROS_ERROR("Could not add point to trajectory. Trajectory not feasible!");
+                return false;
+            }
+        } else {
+            ROS_ERROR("Could not add point to trajectory. Call to trajectory generator failed!");
+            return false;
+        }
+    }
+    */
+
+public:
+
+    CSTrajectoryGenerator(const ros::ServiceClient& cs2csGen, const geometry_msgs::Pose startPose) {
+        cs2csGenerator = cs2csGen;
+        max_acc = TrajectoryGenerator::DEFAULT_MAX_ACC;
+        max_vel = TrajectoryGenerator::DEFAULT_MAX_VEL;
+
+        resetCS2CS(startPose, 0.0);
+
+        keyPointCounter = 1;
+        valid = false;
+    }
+
+    bool createAndAddPose(double x, double y, double z, const geometry_msgs::Quaternion gripperOrientation, double vel) {
+        geometry_msgs::Pose p = TrajectoryGenerator::createPose(x, y, z, gripperOrientation);
+        return addPose(p, vel);
+    }
+
+    bool addPose(const geometry_msgs::Pose p, double vel = 0.) {
+        cs2cs.request.end_pos = p;
+        cs2cs.request.end_vel = checkedVel(vel);
+
+        if(callGenerator(cs2csGenerator, cs2cs)) {
+            // reset cs2cs object to start over at this pose
+            resetCS2CS(p, vel);
+            valid = true;
+            return true;
+        }
+        return false;
+    }
+};
+
 
 class Manipulator {
 
@@ -229,7 +312,7 @@ class Manipulator {
         sensor_msgs::JointState jointState;
 
         ros::ServiceClient cs2csGenerator;
-        ros::ServiceClient js2csGenerator;
+        //ros::ServiceClient js2csGenerator;
         ros::ServiceClient js2jsGenerator;
 
         ros::Publisher armPublisher;
@@ -247,7 +330,7 @@ class Manipulator {
             timeout = ros::Duration(DEFAULT_TIMEOUT);
 
             cs2csGenerator = node.serviceClient<trajectory_generator::CStoCS>("From_CS_to_CS");
-            js2csGenerator = node.serviceClient<trajectory_generator::JStoCS>("From_JS_to_CS");
+            //js2csGenerator = node.serviceClient<trajectory_generator::JStoCS>("From_JS_to_CS");
             js2jsGenerator = node.serviceClient<trajectory_generator::JStoJS>("From_JS_to_JS");
 
             armPublisher = node.advertise<brics_actuator::JointPositions>("/arm_1/arm_controller/position_command", 1);
@@ -266,23 +349,16 @@ class Manipulator {
             delete torqueController;
         }
 
-        Trajectory newCS2CSTrajectory(double x, double y, double z, const geometry_msgs::Quaternion gripperOrientation) const {
-            return Trajectory(cs2csGenerator, Trajectory::createPose(x, y, z, gripperOrientation));
+        CSTrajectoryGenerator getCSTrajectoryGenerator(double x, double y, double z, geometry_msgs::Quaternion q) const {
+            return getCSTrajectoryGenerator(TrajectoryGenerator::createPose(x, y, z, q));
         }
 
-        Trajectory newCS2CSTrajectory(const geometry_msgs::Pose start) const {
-            return Trajectory(cs2csGenerator, start);
+        CSTrajectoryGenerator getCSTrajectoryGenerator(const geometry_msgs::Pose start) const {
+            return CSTrajectoryGenerator(cs2csGenerator, start);
         }
 
-        Trajectory newSmartTrajectory() const {
-            sensor_msgs::JointState jointState = getJointStates();
-            brics_actuator::JointPositions jointPositions = Trajectory::jointStateToJointPositions(jointState);
-            std::stringstream ss;
-            for(int i=0; i< jointPositions.positions.size(); i++) {
-                ss << jointPositions.positions[i] << ", ";
-            }
-            ROS_INFO_STREAM("Current position: " << ss.str());
-            return Trajectory(cs2csGenerator, js2csGenerator, jointPositions);
+        JSTrajectoryGenerator getJSTrajectoryGenerator(const brics_actuator::JointPositions start) const {
+            return JSTrajectoryGenerator(js2jsGenerator, start);
         }
 
         void armPositionHandler(const sensor_msgs::JointStateConstPtr& msg) {
@@ -310,35 +386,7 @@ class Manipulator {
             return jointState;
         }
 
-        bool move(Trajectory trajectory) {
-            torque_control::torque_trajectoryGoal goal;
-
-            // check trajectory
-            if(!trajectory.isValid()) {
-                ROS_INFO("Trajectory is not valid!");
-                return false;
-            }
-
-            // delay execution a bit to allow callbacks
-            ros::spinOnce();
-            ros::Duration(0.5).sleep();
-            ros::spinOnce();
-
-            goal.trajectory = trajectory.get();
-            torqueController->sendGoal(goal);
-
-            // wait for the action to return
-            bool finishedBeforeTimeout = torqueController->waitForResult(ros::Duration(20.0));
-            if (finishedBeforeTimeout) {
-                ROS_INFO("Action finished: %s", torqueController->getState().toString().c_str());
-                return true;
-            } else {
-                ROS_INFO("Action did not finish before the time out.");
-                return false;
-            }
-        }
-
-        bool moveTEST(const trajectory_msgs::JointTrajectory& traj ) {
+        bool move(const trajectory_msgs::JointTrajectory& traj ) {
             torque_control::torque_trajectoryGoal goal;
 
             // delay execution a bit to allow callbacks
@@ -360,15 +408,16 @@ class Manipulator {
             }
         }
 
+        /*
         bool moveTo(double x, double y, double z, const geometry_msgs::Quaternion gripperOrientation) {
-            return moveTo(Trajectory::createPose(x, y, z, gripperOrientation));
+            return moveTo(TrajectoryGenerator::createPose(x, y, z, gripperOrientation));
         }
 
         bool moveTo(geometry_msgs::Pose pose) {
             torque_control::torque_trajectoryGoal goal;
 
             // use actual arm position as start pose
-            Trajectory trajectory = newSmartTrajectory();
+            CSTrajectoryGenerator trajectory = newSmartTrajectory();
             if(!trajectory.addPose(pose, 0.0)) {
                 ROS_ERROR("Unable to create trajectory for pose");
                 return false;
@@ -398,6 +447,7 @@ class Manipulator {
                 return false;
             }
         }
+        */
 
         // FOR TESTING ONLY!!
         // FIXME: delete
@@ -421,7 +471,17 @@ bool moveToStartPose(ros::NodeHandle node, youbot_proxy::Manipulator& m, const b
 
     // current joint position
     sensor_msgs::JointState jointState = m.getJointStates();
-    brics_actuator::JointPositions jointPositionsStart = youbot_proxy::Trajectory::jointStateToJointPositions(jointState);
+    brics_actuator::JointPositions jointPositionsStart;// = youbot_proxy::CSTrajectoryGenerator::jointStateToJointPositions(jointState);
+
+    // check positions
+    if(jointPositionsTarget.positions.size() <= 0) {
+        ROS_WARN("Empty target position for JS trajectory");
+        return false;
+    }
+    if(jointPositionsStart.positions.size() <= 0) {
+        ROS_WARN("Empty goal position for JS trajectory");
+        return false;
+    }
 
     // print current joint positions
     std::stringstream ss1, ss2;
@@ -455,8 +515,8 @@ bool moveToStartPose(ros::NodeHandle node, youbot_proxy::Manipulator& m, const b
     js2js.request.end_pos = jointPositionsTarget;
     js2js.request.end_vel = zeroVelocity;
 
-    js2js.request.max_vel = youbot_proxy::Trajectory::DEFAULT_MAX_VEL;
-    js2js.request.max_acc = youbot_proxy::Trajectory::DEFAULT_MAX_ACC;
+    js2js.request.max_vel = youbot_proxy::CSTrajectoryGenerator::DEFAULT_MAX_VEL;
+    js2js.request.max_acc = youbot_proxy::CSTrajectoryGenerator::DEFAULT_MAX_ACC;
 
     // call generator
     bool feasible = false;
@@ -464,7 +524,7 @@ bool moveToStartPose(ros::NodeHandle node, youbot_proxy::Manipulator& m, const b
         feasible = js2js.response.feasible;
         if(feasible) {
             // extract trajectory points and execute
-            if(!m.moveTEST(js2js.response.trajectory)) {
+            if(!m.move(js2js.response.trajectory)) {
                 ROS_ERROR("JS2JS Trajectory executation failed!");
                 return false;
             }
@@ -483,10 +543,6 @@ brics_actuator::JointPositions extractFirstPointPositions(const trajectory_msgs:
     const int n = 5; // TODO: use joint array
     // extract joint positions
     const trajectory_msgs::JointTrajectoryPoint point = traj.points.back(); // first point of trajectory
-    double firstPt[n];
-    for(int i=0; i<n; i++) {
-        firstPt[i] = point.positions.back();
-    }
 
     // create joint position message
     brics_actuator::JointPositions jointPositions;
@@ -499,7 +555,7 @@ brics_actuator::JointPositions extractFirstPointPositions(const trajectory_msgs:
         ss.str("");
         ss << "arm_joint_" << (i+1);
         val.joint_uri = ss.str();
-        val.value = firstPt[i];
+        val.value = point.positions[i];
         jointPositions.positions.push_back(val);
     }
 
@@ -584,7 +640,7 @@ bool grabObjectAt(const geometry_msgs::Pose& pose, youbot_proxy::Manipulator& m)
     // create linear trajectory
     // cs2cs
     trajectory_msgs::JointTrajectory cs2csTraj;
-    youbot_proxy::Trajectory trajectoryGen = m.newCS2CSTrajectory(armStartPosition);
+    youbot_proxy::CSTrajectoryGenerator trajectoryGen = m.getCSTrajectoryGenerator(armStartPosition);
     if(!trajectoryGen.addPose(armGoalPosition)) {
         ROS_ERROR("Could not create linear grab trajectory");
         return false;
@@ -597,7 +653,7 @@ bool grabObjectAt(const geometry_msgs::Pose& pose, youbot_proxy::Manipulator& m)
 
     // extract current joint positions
     sensor_msgs::JointState jointState = m.getJointStates();
-    brics_actuator::JointPositions currentJointPositions = youbot_proxy::Trajectory::jointStateToJointPositions(jointState);
+    brics_actuator::JointPositions currentJointPositions = youbot_proxy::CSTrajectoryGenerator::jointStateToJointPositions(jointState);
 
     // create trajectory from current joint position to first position of linear trajectory
     // js2js
@@ -613,13 +669,13 @@ bool grabObjectAt(const geometry_msgs::Pose& pose, youbot_proxy::Manipulator& m)
     ///////////////////////////////////////////////////////////////////////////
 
     // move arm to start pose
-    if(!m.moveTEST(js2jsTraj)) {
+    if(!m.move(js2jsTraj)) {
         ROS_ERROR("Could not move arm to start position. Execution of js2js trajectory failed.");
         return false;
     }
 
     // move arm to grab position
-    if(!m.moveTEST(js2jsTraj)) {
+    if(!m.move(js2jsTraj)) {
         ROS_ERROR("Could not move arm to start position. Execution of js2js trajectory failed.");
         return false;
     }
@@ -658,7 +714,7 @@ void testTrajectory(ros::NodeHandle node, youbot_proxy::Manipulator& m) {
     tf::Quaternion quat;
     tf::quaternionMsgToTF(q, quat);
     ROS_INFO_STREAM("Axis: " << quat.getAxis().getX() << "/" << quat.getAxis().getY() << "/" << quat.getAxis().getZ() << " Angle: " << quat.getAngle());
-    youbot_proxy::Trajectory trajectory = m.newCS2CSTrajectory(0.12, 0.25, 0.05, q);
+    youbot_proxy::CSTrajectoryGenerator trajectory = m.getCSTrajectoryGenerator(0.12, 0.25, 0.05, q);
 
     // second point
     if(!trajectory.createAndAddPose(-0.12, 0.25, 0.05, q, 0.0)) {
@@ -667,62 +723,49 @@ void testTrajectory(ros::NodeHandle node, youbot_proxy::Manipulator& m) {
     }
 
 // ATTENTION: first move arm to start position!!!
+    ROS_INFO("Extracting start of trajectory and moving arm to start pose...");
     trajectory_msgs::JointTrajectory traj = trajectory.get(true);
-    trajectory_msgs::JointTrajectoryPoint point = traj.points.back(); // first point of trajectory
-    double firstPt[5];
-    int i = 0;
-    while (!point.positions.empty()) {
-        firstPt[i] = point.positions.back();
-        i++;
-        point.positions.pop_back();
-    }
     brics_actuator::JointPositions msg;
-    brics_actuator::JointValue val;
-    val.unit = "rad";
-    for(int j=0; j<5;j++) {
-        std::stringstream ss;
-        ss.str("");
-        ss << "arm_joint_" << (j+1);
-        val.joint_uri = ss.str();
-        val.value = firstPt[j];
-        msg.positions.push_back(val);
-        ROS_ERROR_STREAM("First Point: " << val.joint_uri << " has value " << val.value);
-    }
+    msg = extractFirstPointPositions(traj);
+
     moveToStartPose(node, m, msg);
     ros::Duration(1).sleep();
     ros::spinOnce();
+    ROS_INFO("... finished!");
 // ATTENTION end
 
     // check and correct gripper orientation (yaw)
+    /*
     double yaw = M_PI_2; // PI/2: gripper is parallel to x
     correctGripperOrientation(yaw, traj);
+    */
 
-    if(!m.moveTEST(traj)) {
+    ROS_INFO("Moving along trajectory");
+    if(!m.move(traj)) {
         ROS_ERROR("CS2CS Trajectory executation failed!");
     }
 }
 
+/*
 void testTrajectoryWithArmPosition(youbot_proxy::Manipulator& m) {
 
     // use of the actual arm position:
-    youbot_proxy::Trajectory trajectory = m.newSmartTrajectory();
+    youbot_proxy::JSTrajectoryGenerator trajectory = m.newSmartTrajectory();
 
     // add a new key point
     //Eigen::Quaterniond grip(0.6851, 0.1749, 0.6851, -0.1749);
     geometry_msgs::Quaternion q = tf::createQuaternionMsgFromRollPitchYaw(0.0, 1.6, 0.0);
-    geometry_msgs::Pose kp = youbot_proxy::Trajectory::createPose(0.00, 0.00, 0.80, q);
-    if(!trajectory.addPose(kp, youbot_proxy::Trajectory::DEFAULT_MAX_VEL)) {
+    geometry_msgs::Pose kp = youbot_proxy::JSTrajectoryGenerator::createPose(0.00, 0.00, 0.80, q);
+    if(!trajectory.addPose(kp, youbot_proxy::JSTrajectoryGenerator::DEFAULT_MAX_VEL)) {
         ROS_ERROR("Unable to create trajectory for 1. key point");
         return;
     }
 
-/*
     // add another key point
     if(!trajectory.createAndAddPose(0.29, 0.00, -0.1, grip, 0.0)) {
         ROS_ERROR("Unable to create trajectory for 2. key point");
         return;
     }
-*/
 
     // move manipulator
     if(!m.move(trajectory)) {
@@ -735,7 +778,7 @@ void testMoveTo(youbot_proxy::Manipulator& m) {
     geometry_msgs::Quaternion q = tf::createQuaternionMsgFromRollPitchYaw(0.0, 1.6, 0.0);
 
     // alt. 1:
-    geometry_msgs::Pose pose = youbot_proxy::Trajectory::createPose(0.27, 0.00, 0.05, q);
+    geometry_msgs::Pose pose = youbot_proxy::JSTrajectoryGenerator::createPose(0.27, 0.00, 0.05, q);
     if(!m.moveTo(pose)) {
         ROS_ERROR("Trajectory executation failed!");
     }
@@ -745,9 +788,9 @@ void testMoveTo(youbot_proxy::Manipulator& m) {
     if(!m.moveTo(0.27, 0.00, 0.05, grip)) {
         ROS_ERROR("Trajectory executation failed!");
     }
-    */
+    *//*
 }
-
+*/
 
 //----------------------------------- MAIN -----------------------------------------------
 int main(int argc, char** argv)

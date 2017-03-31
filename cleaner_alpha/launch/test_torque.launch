@@ -2,7 +2,7 @@
 <launch>
 
 	<!-- Start the youbot -->
-	<include file="$(find cleaner_alpha)/launch/youbot_driver.launch" />
+	<!--include file="$(find cleaner_alpha)/launch/youbot_driver.launch" /-->
 
 	<!-- Upload youbot model to parameter server --> 
 	<!-- TODO: copy youbot.urdf.xacro -->

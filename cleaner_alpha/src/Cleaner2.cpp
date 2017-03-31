@@ -1,5 +1,7 @@
 #include "ros/ros.h"
 
+#include <boost/assign/list_of.hpp>
+
 #include "torque_control/torque_trajectoryAction.h"
 #include "actionlib/client/simple_action_client.h"
 #include "trajectory_generator/CStoCS.h"
@@ -105,6 +107,10 @@ public:
         kp.position.z = z;
         kp.orientation = gripperOrientation;
         return kp;
+    }
+
+    static void reverseTrajectory(trajectory_msgs::JointTrajectory& trajectory) {
+        std::reverse(trajectory.points.begin(), trajectory.points.end());
     }
 
     void setMaxVel(double vel) {
@@ -229,48 +235,6 @@ private:
         cs2cs.request.max_vel = max_vel;
     }
 
-    /*
-    template <typename T> // T is either   JStoCS or CStoCS   of namespace trajectory_generator
-    bool callGenerator(ros::ServiceClient& generator, T& msg) {     // !! no const
-        BOOST_STATIC_ASSERT(((boost::is_base_of<trajectory_generator::JStoCS, T>::value) || (boost::is_base_of<trajectory_generator::CStoCS, T>::value))); //Yes, the double parentheses are needed, otherwise the comma will be seen as macro argument separator
-
-        bool feasible = false;
-        if(generator.call(msg)) {
-            feasible = msg.response.feasible;
-            if(feasible) {
-                // extract trajectory points and append them to member 't'
-                extractAndStoreTrajectory(msg.response.trajectory);
-                return true;
-            } else {
-                ROS_ERROR("Could not add point to trajectory. Trajectory not feasible!");
-                return false;
-            }
-        } else {
-            ROS_ERROR("Could not add point to trajectory. Call to trajectory generator failed!");
-            return false;
-        }
-    }
-    */
-    /*
-    bool callGenerator(trajectory_generator::CStoCS& msg) {     // !! no const
-        bool feasible = false;
-        if(cs2csGenerator.call(msg)) {
-            feasible = msg.response.feasible;
-            if(feasible) {
-                // extract trajectory points and append them to member 't'
-                extractAndStoreTrajectory(msg.response.trajectory);
-                return true;
-            } else {
-                ROS_ERROR("Could not add point to trajectory. Trajectory not feasible!");
-                return false;
-            }
-        } else {
-            ROS_ERROR("Could not add point to trajectory. Call to trajectory generator failed!");
-            return false;
-        }
-    }
-    */
-
 public:
 
     CSTrajectoryGenerator(const ros::ServiceClient& cs2csGen, const geometry_msgs::Pose startPose) {
@@ -303,37 +267,217 @@ public:
     }
 };
 
+template <class T, size_t MAX_LENGTH>
+class ConstArrayFiller {
+private:
+    size_t length;
+
+protected:
+    void addElement(T* array, const T& element) {
+        if(length >= MAX_LENGTH) {
+            throw 0;
+        }
+        array[length] = element;
+        length++;
+    }
+
+public:
+    ConstArrayFiller(): length(0) {}
+    ~ConstArrayFiller(){}
+
+    virtual void fill(T* array) = 0;
+
+};
+
+template <class T, size_t MAX_LENGTH>
+class ConstArray {
+private:
+    T array[MAX_LENGTH];
+
+public:
+    explicit ConstArray(ConstArrayFiller<T, MAX_LENGTH>& filler) {
+        filler.fill(array);
+    }
+
+    T const& operator[](size_t i) const {
+        assert(i >= 0 && i < MAX_LENGTH);
+        return array[i];
+    }
+
+    size_t size() const {
+        return MAX_LENGTH;
+    }
+
+    const T* getArray() const {
+        return array;
+    }
+};
+
 
 class Manipulator {
 
     private:
+        class ConstJointNameArrayFiller: public ConstArrayFiller<std::string, 5> {
+        public:
+            virtual void fill(std::string* array) {
+                addElement(array, "arm_joint_1");
+                addElement(array, "arm_joint_2");
+                addElement(array, "arm_joint_3");
+                addElement(array, "arm_joint_4");
+                addElement(array, "arm_joint_5");
+            }
+        };
+        static ConstJointNameArrayFiller armJointArrayFiller;
+
+        class ConstGripperNameArrayFiller: public ConstArrayFiller<std::string, 2> {
+        public:
+            virtual void fill(std::string* array) {
+                addElement(array, "gripper_finger_joint_l");
+                addElement(array, "gripper_finger_joint_r");
+            }
+        };
+        static ConstGripperNameArrayFiller gripperJointArrayFiller;
+
+        typedef ConstArray<std::string, 5> ConstArmJointNameArray;
+        typedef ConstArray<std::string, 2> ConstGripperJointNameArray;
 
         ros::Duration timeout;
         sensor_msgs::JointState jointState;
 
         ros::ServiceClient cs2csGenerator;
-        //ros::ServiceClient js2csGenerator;
         ros::ServiceClient js2jsGenerator;
 
-        ros::Publisher armPublisher;
+        ros::Publisher gripperPublisher;
+
         ros::Subscriber armPositionSubscriber;
 
         actionlib::SimpleActionClient<torque_control::torque_trajectoryAction>* torqueController;
 
+        // public for testing only!!!!!! FIXME: remove
+    public:
+        brics_actuator::JointPositions extractFirstPointPositions(const trajectory_msgs::JointTrajectory& traj) const {
+            // extract joint positions and names
+            const trajectory_msgs::JointTrajectoryPoint point = traj.points.back(); // first point of trajectory
+            const std::vector<std::string> joint_names = traj.joint_names;
+
+            // create joint position message
+            brics_actuator::JointPositions jointPositions;
+            brics_actuator::JointValue val;
+
+            // TODO: optimize with JOINT_NAMES-array
+            for(int i=0; i<ARM_JOINT_NAMES.size();i++) {
+                val.joint_uri = joint_names[i];
+                val.unit = "rad";
+                val.value = point.positions[i];
+                jointPositions.positions.push_back(val);
+            }
+
+            return jointPositions;
+        }
+
+        void correctGripperOrientationConst(double angle, trajectory_msgs::JointTrajectory& traj) const {
+            ROS_INFO("Correcting gripper orientation ...");
+
+            // find joint_5 index
+            double nPoints = traj.points.size();
+            double nJoints = ARM_JOINT_NAMES.size();
+            int joint5 = 0;
+
+            for(int i=0; i<nJoints; i++) {
+                if(traj.joint_names[i] == ARM_JOINT_NAMES[I_JOINT_5]) {
+                    joint5 = i;
+                    break;
+                }
+            }
+
+            // set angle for joint 5 to _angle_ for whole trajectory
+            for(int i=0; i<nPoints; i++) {
+                trajectory_msgs::JointTrajectoryPoint* point = &traj.points[i];
+                if(point->positions.size() == nJoints)     point->positions[joint5] = angle;
+                if(point->velocities.size() == nJoints)    point->velocities[joint5] = 0;
+                if(point->accelerations.size() == nJoints) point->accelerations[joint5] = 0;
+                if(point->effort.size() == nJoints)        point->effort[joint5] = 0;
+            }
+
+            ROS_INFO("... finished.");
+        }
+
+        bool move(const trajectory_msgs::JointTrajectory& traj ) {
+            torque_control::torque_trajectoryGoal goal;
+
+            // delay execution a bit to allow callbacks
+            ros::spinOnce();
+            ros::Duration(0.5).sleep();
+            ros::spinOnce();
+
+            goal.trajectory = traj;
+            torqueController->sendGoal(goal);
+
+            // wait for the action to return
+            bool finishedBeforeTimeout = torqueController->waitForResult(ros::Duration(20.0));
+            if (finishedBeforeTimeout) {
+                ROS_INFO("Action finished: %s", torqueController->getState().toString().c_str());
+                return true;
+            } else {
+                ROS_INFO("Action did not finish before the time out.");
+                return false;
+            }
+        }
+
+        brics_actuator::JointPositions createGripperPositionMsg(double left, double right) const {
+            brics_actuator::JointPositions msg;
+            brics_actuator::JointValue leftGripperValue;
+            brics_actuator::JointValue rightGripperValue;
+
+            leftGripperValue.joint_uri = GRIPPER_JOINT_NAMES[I_FINGER_LEFT];
+            leftGripperValue.unit = "m";
+            leftGripperValue.value = left;
+
+            rightGripperValue.joint_uri = GRIPPER_JOINT_NAMES[I_FINGER_RIGHT];
+            rightGripperValue.unit = "m";
+            rightGripperValue.value = right;
+
+            msg.positions.push_back(leftGripperValue);
+            msg.positions.push_back(rightGripperValue);
+            return msg;
+        }
+
+        void sendGripperPositionMsg(const brics_actuator::JointPositions msg) {
+            this->gripperPublisher.publish(msg);
+        }
+
     public:
         // constants
-        static const int N_JOINTS = 5;
-        static const double DEFAULT_TIMEOUT = 20;
-        static const std::string JOINT_NAMES[N_JOINTS];
+        const double DEFAULT_TIMEOUT;
+        const int I_JOINT_1;
+        const int I_JOINT_2;
+        const int I_JOINT_3;
+        const int I_JOINT_4;
+        const int I_JOINT_5;
+        const int I_FINGER_LEFT;
+        const int I_FINGER_RIGHT;
+        const ConstArmJointNameArray ARM_JOINT_NAMES;
+        const ConstGripperJointNameArray GRIPPER_JOINT_NAMES;
 
-        Manipulator(ros::NodeHandle node) {
+        Manipulator(ros::NodeHandle node):
+            DEFAULT_TIMEOUT(20),
+            I_JOINT_1(0),
+            I_JOINT_2(1),
+            I_JOINT_3(2),
+            I_JOINT_4(3),
+            I_JOINT_5(4),
+            I_FINGER_LEFT(0),
+            I_FINGER_RIGHT(1),
+            ARM_JOINT_NAMES(armJointArrayFiller),
+            GRIPPER_JOINT_NAMES(gripperJointArrayFiller)
+        {
             timeout = ros::Duration(DEFAULT_TIMEOUT);
 
             cs2csGenerator = node.serviceClient<trajectory_generator::CStoCS>("From_CS_to_CS");
-            //js2csGenerator = node.serviceClient<trajectory_generator::JStoCS>("From_JS_to_CS");
             js2jsGenerator = node.serviceClient<trajectory_generator::JStoJS>("From_JS_to_JS");
 
-            armPublisher = node.advertise<brics_actuator::JointPositions>("/arm_1/arm_controller/position_command", 1);
+            gripperPublisher = node.advertise<brics_actuator::JointPositions>("/arm_1/gripper_controller/position_command", 5);
+
             armPositionSubscriber = node.subscribe<sensor_msgs::JointState>("/joint_states", 1, &Manipulator::armPositionHandler, this);
 
             torqueController = new actionlib::SimpleActionClient<torque_control::torque_trajectoryAction>("torque_control", true);
@@ -365,11 +509,11 @@ class Manipulator {
             sensor_msgs::JointState state;
 
             // only save arm joint values
-            for(int i=0; i<N_JOINTS; i++) {
-                if(JOINT_NAMES[i] != msg->name[i]) {
+            for(int i=0; i<ARM_JOINT_NAMES.size(); i++) {
+                if(ARM_JOINT_NAMES[i] != msg->name[i]) {
                     return;
                 }
-                state.name.push_back(JOINT_NAMES[i]);
+                state.name.push_back(ARM_JOINT_NAMES[i]);
                 state.position.push_back(msg->position[i]);
                 state.velocity.push_back(msg->velocity[i]);
                 state.effort.push_back(msg->effort[i]);
@@ -386,347 +530,202 @@ class Manipulator {
             return jointState;
         }
 
-        bool move(const trajectory_msgs::JointTrajectory& traj ) {
-            torque_control::torque_trajectoryGoal goal;
-
-            // delay execution a bit to allow callbacks
-            ros::spinOnce();
-            ros::Duration(0.5).sleep();
-            ros::spinOnce();
-
-            goal.trajectory = traj;
-            torqueController->sendGoal(goal);
-
-            // wait for the action to return
-            bool finishedBeforeTimeout = torqueController->waitForResult(ros::Duration(20.0));
-            if (finishedBeforeTimeout) {
-                ROS_INFO("Action finished: %s", torqueController->getState().toString().c_str());
-                return true;
-            } else {
-                ROS_INFO("Action did not finish before the time out.");
-                return false;
-            }
+        void openGripper() {
+            brics_actuator::JointPositions gripperPositionMsg = this->createGripperPositionMsg(0.0115, 0.0115);
+            this->sendGripperPositionMsg(gripperPositionMsg);
+            ROS_INFO("Gripper opened");
         }
 
-        /*
-        bool moveTo(double x, double y, double z, const geometry_msgs::Quaternion gripperOrientation) {
-            return moveTo(TrajectoryGenerator::createPose(x, y, z, gripperOrientation));
+        void closeGripper() {
+            brics_actuator::JointPositions gripperPositionMsg = this->createGripperPositionMsg(0.0, 0.0);
+            this->sendGripperPositionMsg(gripperPositionMsg);
+            ROS_INFO("Gripper closed");
         }
 
-        bool moveTo(geometry_msgs::Pose pose) {
-            torque_control::torque_trajectoryGoal goal;
 
-            // use actual arm position as start pose
-            CSTrajectoryGenerator trajectory = newSmartTrajectory();
-            if(!trajectory.addPose(pose, 0.0)) {
-                ROS_ERROR("Unable to create trajectory for pose");
+        bool moveArmToJointPosition(const brics_actuator::JointPositions& targetPosition) {
+            ROS_INFO("Generating trajectory to joint position (js2js)");
+            // extract current joint positions
+            sensor_msgs::JointState jointState = this->getJointStates();
+            brics_actuator::JointPositions currentJointPositions = youbot_proxy::CSTrajectoryGenerator::jointStateToJointPositions(jointState);
+
+            // create trajectory from current joint position to target position
+            // js2js
+            trajectory_msgs::JointTrajectory js2jsTraj;
+            youbot_proxy::JSTrajectoryGenerator trajectoryGenJs = this->getJSTrajectoryGenerator(currentJointPositions);
+            if(!trajectoryGenJs.addPosition(targetPosition)) {
+                ROS_ERROR("Could not create trajectory to target position");
+                return false;
+            }
+            js2jsTraj = trajectoryGenJs.get();
+
+            // move arm
+            ROS_INFO("Moving arm to target position (js2js)");
+            if(!this->move(js2jsTraj)) {
+                ROS_ERROR("Could not moarm_joint_2ve arm to target position. Execution of js2js trajectory failed.");
+                return false;
+            }
+            return true;
+        }
+
+        bool grabObjectAt(const geometry_msgs::Pose& pose) {
+            // configuration
+            double dGrabLine = 0.1;
+            double gripperExt = 0; // TODO: test
+            double joint_5_min = 0.1221730476;
+            double joint_1_Aty0 = 2.9499152248919236;
+
+            // extract rpy
+            double roll, pitch, yaw;
+            tf::Quaternion quat;
+            tf::quaternionMsgToTF(pose.orientation, quat);
+            tf::Matrix3x3(quat).getRPY(roll, pitch, yaw);
+
+            ROS_INFO_STREAM("Roll=" << roll << ", Pitch=" << pitch << ", Yaw=" << yaw);
+
+            // check roll, pitch and yaw
+            if(roll < -M_PI || roll > M_PI) {
+                ROS_ERROR("Roll must not be within ]-PI, PI[");
+                return false;
+            }
+            if(pitch != 0) {
+                ROS_ERROR("Pitch must be 0");
+                return false;
+            }
+            if(yaw != 0) {
+                ROS_ERROR("Yaw must be 0");
                 return false;
             }
 
-            // check trajectory
-            if(!trajectory.isValid()) {
-                ROS_INFO("Trajectory is not valid!");
+            ///////////////////////////////////////////////////////////////////////////
+            // setup phase
+            ///////////////////////////////////////////////////////////////////////////
+            ROS_INFO("Generating linear trajectory (cs2cs)");
+            geometry_msgs::Quaternion q = tf::createQuaternionMsgFromRollPitchYaw(0.0, M_PI_2, 0.0);
+
+            // create IK start position
+            geometry_msgs::Pose armStartPosition;
+            armStartPosition.orientation = q;
+            armStartPosition.position.x = pose.position.x;
+            armStartPosition.position.y = pose.position.y;
+            armStartPosition.position.z = pose.position.z + gripperExt + dGrabLine;
+
+
+            // create IK goal position
+            geometry_msgs::Pose armGoalPosition;
+            armGoalPosition.orientation = q;
+            armGoalPosition.position.x = pose.position.x;
+            armGoalPosition.position.y = pose.position.y;
+            armGoalPosition.position.z = pose.position.z + gripperExt;
+
+
+            // create linear trajectory
+            // cs2cs
+            trajectory_msgs::JointTrajectory cs2csTraj;
+            youbot_proxy::CSTrajectoryGenerator trajectoryGenCS = this->getCSTrajectoryGenerator(armStartPosition);
+            if(!trajectoryGenCS.addPose(armGoalPosition)) {
+                ROS_ERROR("Could not create linear grab trajectory");
+                return false;
+            }
+            cs2csTraj = trajectoryGenCS.get();
+
+
+            ROS_INFO("Generating trajectory to first position (js2js)");
+            // extract current joint positions
+            sensor_msgs::JointState jointState = this->getJointStates();
+            brics_actuator::JointPositions currentJointPositions = youbot_proxy::CSTrajectoryGenerator::jointStateToJointPositions(jointState);
+
+            // extract first point
+            brics_actuator::JointPositions firstJointPositions = this->extractFirstPointPositions(cs2csTraj);
+
+            ROS_INFO("Calculating new gripper orientation");
+            double j1_current;
+            for(int i=0; i<firstJointPositions.positions.size(); i++) {
+                if(firstJointPositions.positions[i].joint_uri == "arm_joint_1") {
+                    j1_current = firstJointPositions.positions[i].value;
+                    break;
+                }
+            }
+            // calculate gripper joint angle
+            double j1_correction = j1_current - joint_1_Aty0;
+            double joint_limit_correction = - M_PI_2*joint_5_min; //i am a motherfucking genius
+            double angle = roll + M_PI + joint_limit_correction + j1_correction; // gripper should be directed forward if roll==0, therefore add PI
+
+            // correct gripper orientation
+            for(int i=0; i<firstJointPositions.positions.size(); i++) {
+                if(firstJointPositions.positions[i].joint_uri == "arm_joint_5") {
+                    firstJointPositions.positions[i].value = angle;
+                    break;
+                }
+            }
+
+            // create trajectory from current joint position to first position of linear trajectory
+            // js2js
+            trajectory_msgs::JointTrajectory js2jsTraj;
+            youbot_proxy::JSTrajectoryGenerator trajectoryGenJs = this->getJSTrajectoryGenerator(currentJointPositions);
+            if(!trajectoryGenJs.addPosition(firstJointPositions)) {
+                ROS_ERROR("Could not create trajectory to first position");
+                return false;
+            }
+            js2jsTraj = trajectoryGenJs.get();
+
+            // correct orientation of gripper
+            ROS_INFO("Correcting gripper orientation");
+            this->correctGripperOrientationConst(angle, cs2csTraj);
+
+
+            ///////////////////////////////////////////////////////////////////////////
+            // actual movement phase
+            ///////////////////////////////////////////////////////////////////////////
+
+            // move arm to start pose
+            ROS_INFO("Moving arm to first position (js2js)");
+            if(!this->move(js2jsTraj)) {
+                ROS_ERROR("Could not move arm to start position. Execution of js2js trajectory failed.");
                 return false;
             }
 
-            // delay execution a bit to allow callbacks
-            ros::spinOnce();
-            ros::Duration(0.5).sleep();
-            ros::spinOnce();
+            // open gripper
+            this->openGripper();
 
-            goal.trajectory = trajectory.get();
-            torqueController->sendGoal(goal);
-
-            // wait for the action to return
-            bool finishedBeforeTimeout = torqueController->waitForResult(ros::Duration(20.0));
-            if (finishedBeforeTimeout) {
-                ROS_INFO("Action finished: %s", torqueController->getState().toString().c_str());
-                return true;
-            } else {
-                ROS_INFO("Action did not finish before the time out.");
+            // move arm to grab position
+            ROS_INFO("Moving arm to grab position (cs2cs)");
+            if(!this->move(cs2csTraj)) {
+                ROS_ERROR("Could not move arm to grab position. Execution of cs2cs trajectory failed.");
                 return false;
             }
-        }
-        */
 
-        // FOR TESTING ONLY!!
-        // FIXME: delete
-        void publish(const brics_actuator::JointPositions& msg) {
-            armPublisher.publish(msg);
-        }
+            // close gripper
+            this->closeGripper();
 
+            // move arm back to start position
+            ROS_INFO("Moving arm back to start position (cs2cs)");
+            TrajectoryGenerator::reverseTrajectory(cs2csTraj);
+            if(!this->move(cs2csTraj)) {
+                ROS_ERROR("Could not move arm to start position. Execution of cs2cs trajectory failed.");
+                return false;
+            }
+
+            // move arm to intermediate position
+            ROS_INFO("Moving arm to inermediate position");
+            brics_actuator::JointPositions interPos = currentJointPositions; // in this case it's the init position
+            this->moveArmToJointPosition(interPos);
+
+            // dropping or transporting???
+
+
+            // finished
+            return true;
+        }
 };
 
-const std::string Manipulator::JOINT_NAMES[] = {"arm_joint_1", "arm_joint_2", "arm_joint_3", "arm_joint_4", "arm_joint_5"};
+//const std::vector<std::string> Manipulator::JOINT_NAMES = boost::assign::list_of("arm_joint_1", "arm_joint_2", "arm_joint_3", "arm_joint_4", "arm_joint_5");
+Manipulator::ConstJointNameArrayFiller Manipulator::armJointArrayFiller = Manipulator::ConstJointNameArrayFiller();
+Manipulator::ConstGripperNameArrayFiller Manipulator::gripperJointArrayFiller = Manipulator::ConstGripperNameArrayFiller();
 
 }
 
 //-------------------------------- FUNCTIONS ---------------------------------------------
-bool moveToStartPose(ros::NodeHandle node, youbot_proxy::Manipulator& m, const brics_actuator::JointPositions& msg) {
-    ros::ServiceClient js2jsGenerator = node.serviceClient<trajectory_generator::JStoJS>("From_JS_to_JS");
-    trajectory_generator::JStoJS js2js;
-
-    // goal joint position
-    brics_actuator::JointPositions jointPositionsTarget = msg;
-
-    // current joint position
-    sensor_msgs::JointState jointState = m.getJointStates();
-    brics_actuator::JointPositions jointPositionsStart = youbot_proxy::TrajectoryGenerator::jointStateToJointPositions(jointState);
-
-    // check positions
-    if(jointPositionsTarget.positions.size() <= 0) {
-        ROS_WARN("Empty target position for JS trajectory");
-        return false;
-    }
-    if(jointPositionsStart.positions.size() <= 0) {
-        ROS_WARN("Empty goal position for JS trajectory");
-        return false;
-    }
-
-    // print current joint positions
-    std::stringstream ss1, ss2;
-    for(int i=0; i< jointPositionsStart.positions.size(); i++) {
-        ss1 << jointPositionsStart.positions[i].joint_uri << ": " <<
-              jointPositionsStart.positions[i].value << " " <<
-              jointPositionsStart.positions[i].unit << "\n";
-        ss2 << jointPositionsTarget.positions[i].joint_uri << ": " <<
-              jointPositionsTarget.positions[i].value << " " <<
-              jointPositionsTarget.positions[i].unit << "\n";
-    }
-    ROS_INFO_STREAM("Current position: " << ss1.str());
-    ROS_INFO_STREAM("Target position: " << ss2.str());
-
-    // create velocity msgs
-    brics_actuator::JointVelocities zeroVelocity;
-    brics_actuator::JointValue zero;
-    zero.unit = "s^-1 rad";
-    zero.value = 0.00;
-    for(int j=0; j<5; j++) {
-        // create zero velocity msg
-        std::stringstream st;
-        st << "arm_joint_" << (j+1);
-        zero.joint_uri = st.str().c_str();
-        zeroVelocity.velocities.push_back(zero);
-    }
-
-    // create service message
-    js2js.request.start_pos = jointPositionsStart;
-    js2js.request.start_vel = zeroVelocity;
-    js2js.request.end_pos = jointPositionsTarget;
-    js2js.request.end_vel = zeroVelocity;
-
-    js2js.request.max_vel = youbot_proxy::CSTrajectoryGenerator::DEFAULT_MAX_VEL;
-    js2js.request.max_acc = youbot_proxy::CSTrajectoryGenerator::DEFAULT_MAX_ACC;
-
-    // call generator
-    bool feasible = false;
-    if(js2jsGenerator.call(js2js)) {
-        feasible = js2js.response.feasible;
-        if(feasible) {
-            // extract trajectory points and execute
-            if(!m.move(js2js.response.trajectory)) {
-                ROS_ERROR("JS2JS Trajectory executation failed!");
-                return false;
-            }
-            return true;
-        } else {
-            ROS_ERROR("moveToStartPose: Could not add point to trajectory. Trajectory not feasible!");
-            return false;
-        }
-    } else {
-        ROS_ERROR("moveToStartPose: Could not add point to trajectory. Call to trajectory generator failed!");
-        return false;
-    }
-}
-
-brics_actuator::JointPositions extractFirstPointPositions(const trajectory_msgs::JointTrajectory& traj) {
-    const int n = 5; // TODO: use joint array
-    // extract joint positions
-    const trajectory_msgs::JointTrajectoryPoint point = traj.points.back(); // first point of trajectory
-    const std::vector<std::string> joint_names = traj.joint_names;
-
-    // create joint position message
-    brics_actuator::JointPositions jointPositions;
-    brics_actuator::JointValue val;
-
-    // TODO: optimize with JOINT_NAMES-array
-    for(int i=0; i<n;i++) {
-        val.joint_uri = joint_names[i];
-        val.unit = "rad";
-        val.value = point.positions[i];
-        jointPositions.positions.push_back(val);
-    }
-
-    return jointPositions;
-}
-
-void correctGripperOrientation(double angle, trajectory_msgs::JointTrajectory& traj) {
-    ROS_INFO("Correcting gripper orientation ...");
-
-    // find joint 5 index
-    double n = traj.points.size();
-    double nJoints = traj.joint_names.size();
-    const std::string ARM_JOINT_5 = "arm_joint_5";
-    int joint5 = 0;
-
-    for(int i=0; i<nJoints; i++) {
-        if(traj.joint_names[i] == ARM_JOINT_5) {
-            joint5 = i;
-            break;
-        }
-    }
-
-    // set angle for joint 5 to _angle_ for whole trajectory
-    for(int i=0; i<n; i++) {
-        trajectory_msgs::JointTrajectoryPoint* point = &traj.points[i];
-        if(point->positions.size() == nJoints)     point->positions[joint5] = angle;
-        if(point->velocities.size() == nJoints)    point->velocities[joint5] = 0;
-        if(point->accelerations.size() == nJoints) point->accelerations[joint5] = 0;
-        if(point->effort.size() == nJoints)        point->effort[joint5] = 0;
-    }
-
-    ROS_INFO("... finished.");
-}
-
-bool grabObjectAt(const geometry_msgs::Pose& pose, youbot_proxy::Manipulator& m) {
-    // configuration
-    double dGrabLine = 0.1;
-    double gripperExt = 0; // TODO: test
-    double joint_5_min = 0.1221730476;
-    double joint_1_Aty0 = 2.9499152248919236;
-
-    // extract rpy
-    double roll, pitch, yaw;
-    tf::Quaternion quat;
-    tf::quaternionMsgToTF(pose.orientation, quat);
-    tf::Matrix3x3(quat).getRPY(roll, pitch, yaw);
-
-    ROS_INFO_STREAM("Roll=" << roll << ", Pitch=" << pitch << ", Yaw=" << yaw);
-
-    // check roll and pitch and yaw
-    if(roll < -M_PI || roll > M_PI) {
-        ROS_ERROR("Roll must not be within ]-PI, PI[");
-        return false;
-    }
-    if(pitch != 0) {
-        ROS_ERROR("Pitch must be 0");
-        return false;
-    }
-    if(yaw != 0) {
-        ROS_ERROR("Yaw must be 0");
-        return false;
-    }
-
-    ///////////////////////////////////////////////////////////////////////////
-    // setup phase
-    ///////////////////////////////////////////////////////////////////////////
-    ROS_INFO("Generating linear trajectory (cs2cs)");
-    geometry_msgs::Quaternion q = tf::createQuaternionMsgFromRollPitchYaw(0.0, M_PI_2, 0.0);
-
-    // create IK start position
-    geometry_msgs::Pose armStartPosition;
-    armStartPosition.orientation = q;
-    armStartPosition.position.x = pose.position.x;
-    armStartPosition.position.y = pose.position.y;
-    armStartPosition.position.z = pose.position.z + gripperExt + dGrabLine;
-
-
-    // create IK goal position
-    geometry_msgs::Pose armGoalPosition;
-    armGoalPosition.orientation = q;
-    armGoalPosition.position.x = pose.position.x;
-    armGoalPosition.position.y = pose.position.y;
-    armGoalPosition.position.z = pose.position.z + gripperExt;
-
-
-    // create linear trajectory
-    // cs2cs
-    trajectory_msgs::JointTrajectory cs2csTraj;
-    youbot_proxy::CSTrajectoryGenerator trajectoryGenCS = m.getCSTrajectoryGenerator(armStartPosition);
-    if(!trajectoryGenCS.addPose(armGoalPosition)) {
-        ROS_ERROR("Could not create linear grab trajectory");
-        return false;
-    }
-    cs2csTraj = trajectoryGenCS.get();
-
-
-    ROS_INFO("Generating trajectory to first position (js2js)");
-    // extract current joint positions
-    sensor_msgs::JointState jointState = m.getJointStates();
-    brics_actuator::JointPositions currentJointPositions = youbot_proxy::CSTrajectoryGenerator::jointStateToJointPositions(jointState);
-
-    // extract first point
-    brics_actuator::JointPositions firstJointPositions = extractFirstPointPositions(cs2csTraj);
-
-    ROS_INFO("Calculating new gripper orientation");
-    double j1_current;
-    for(int i=0; i<firstJointPositions.positions.size(); i++) {
-        if(firstJointPositions.positions[i].joint_uri == "arm_joint_1") {
-            j1_current = firstJointPositions.positions[i].value;
-            break;
-        }
-    }
-    // calculate gripper joint angle
-    double j1_correction = j1_current - joint_1_Aty0;
-    double angle = roll + M_PI - M_PI_2*joint_5_min + j1_correction; //i am a motherfucking genius
-
-    // correct gripper orientation
-    for(int i=0; i<firstJointPositions.positions.size(); i++) {
-        if(firstJointPositions.positions[i].joint_uri == "arm_joint_5") {
-            firstJointPositions.positions[i].value = angle;
-            break;
-        }
-    }
-
-    // create trajectory from current joint position to first position of linear trajectory
-    // js2js
-    trajectory_msgs::JointTrajectory js2jsTraj;
-    youbot_proxy::JSTrajectoryGenerator trajectoryGenJs = m.getJSTrajectoryGenerator(currentJointPositions);
-    if(!trajectoryGenJs.addPosition(firstJointPositions)) {
-        ROS_ERROR("Could not create trajectory to first position");
-        return false;
-    }
-    js2jsTraj = trajectoryGenJs.get();
-
-    // correct orientation of gripper
-    ROS_INFO("Correcting gripper orientation");
-    correctGripperOrientation(angle, cs2csTraj);
-
-
-    ///////////////////////////////////////////////////////////////////////////
-    // actual movement phase
-    ///////////////////////////////////////////////////////////////////////////
-
-    // move arm to start pose
-    ROS_INFO("Moving arm to first position (js2js)");
-    if(!m.move(js2jsTraj)) {
-        ROS_ERROR("Could not move arm to start position. Execution of js2js trajectory failed.");
-        return false;
-    }
-
-    // move arm to grab position
-    ROS_INFO("Moving arm to grab position (cs2cs)");
-    if(!m.move(cs2csTraj)) {
-        ROS_ERROR("Could not move arm to start position. Execution of js2js trajectory failed.");
-        return false;
-    }
-
-    // close gripper
-
-
-    // move arm back to start position
-
-
-    // move arm to intermediate position
-
-
-    // dropping or transporting???
-
-
-    // finished
-    return true;
-}
-
 void testTrajectory(ros::NodeHandle node, youbot_proxy::Manipulator& m) {
     // use of a start postion
     // orientation of the gripper relativ to the base coordinate system:
@@ -756,7 +755,7 @@ void testTrajectory(ros::NodeHandle node, youbot_proxy::Manipulator& m) {
     }
     ROS_INFO_STREAM("First point of cs2cs: " << sp.str());
 
-    brics_actuator::JointPositions targetJointPositions = extractFirstPointPositions(cs2csTraj);
+    brics_actuator::JointPositions targetJointPositions = m.extractFirstPointPositions(cs2csTraj);
 
     // extract current joint positions
     sensor_msgs::JointState jointState = m.getJointStates();
@@ -799,7 +798,7 @@ void testTrajectory(ros::NodeHandle node, youbot_proxy::Manipulator& m) {
     // check and correct gripper orientation (yaw)
 
     //double yaw = M_PI_2; // PI/2: gripper is parallel to x
-    //correctGripperOrientation(yaw, cs2csTraj);
+    //m.correctGripperOrientation(yaw, cs2csTraj);
 
 
     ROS_INFO("Moving along trajectory");
@@ -807,52 +806,6 @@ void testTrajectory(ros::NodeHandle node, youbot_proxy::Manipulator& m) {
         ROS_ERROR("CS2CS Trajectory executation failed!");
     }
 }
-
-/*
-void testTrajectoryWithArmPosition(youbot_proxy::Manipulator& m) {
-
-    // use of the actual arm position:
-    youbot_proxy::JSTrajectoryGenerator trajectory = m.newSmartTrajectory();
-
-    // add a new key point
-    //Eigen::Quaterniond grip(0.6851, 0.1749, 0.6851, -0.1749);
-    geometry_msgs::Quaternion q = tf::createQuaternionMsgFromRollPitchYaw(0.0, 1.6, 0.0);
-    geometry_msgs::Pose kp = youbot_proxy::JSTrajectoryGenerator::createPose(0.00, 0.00, 0.80, q);
-    if(!trajectory.addPose(kp, youbot_proxy::JSTrajectoryGenerator::DEFAULT_MAX_VEL)) {
-        ROS_ERROR("Unable to create trajectory for 1. key point");
-        return;
-    }
-
-    // add another key point
-    if(!trajectory.createAndAddPose(0.29, 0.00, -0.1, grip, 0.0)) {
-        ROS_ERROR("Unable to create trajectory for 2. key point");
-        return;
-    }
-
-    // move manipulator
-    if(!m.move(trajectory)) {
-        ROS_ERROR("Trajectory executation failed!");
-    }
-}
-
-void testMoveTo(youbot_proxy::Manipulator& m) {
-    //Eigen::Quaterniond grip(0.6851, 0.1749, 0.6851, 0.1749);
-    geometry_msgs::Quaternion q = tf::createQuaternionMsgFromRollPitchYaw(0.0, 1.6, 0.0);
-
-    // alt. 1:
-    geometry_msgs::Pose pose = youbot_proxy::JSTrajectoryGenerator::createPose(0.27, 0.00, 0.05, q);
-    if(!m.moveTo(pose)) {
-        ROS_ERROR("Trajectory executation failed!");
-    }
-
-    // alt. 2:
-    /*
-    if(!m.moveTo(0.27, 0.00, 0.05, grip)) {
-        ROS_ERROR("Trajectory executation failed!");
-    }
-    *//*
-}
-*/
 
 //----------------------------------- MAIN -----------------------------------------------
 int main(int argc, char** argv)
@@ -865,13 +818,11 @@ int main(int argc, char** argv)
     ros::spinOnce();
 
     //testTrajectory(n, m);
-    //testTrajectoryWithArmPosition(m);
-    //testMoveTo(m);
 
     geometry_msgs::Quaternion q = tf::createQuaternionMsgFromRollPitchYaw(0.0, 0.0, 0.0);
     // examples: (0.12 / 0.25, -0.10), (0.29 / 0.00 / -0.10)
     geometry_msgs::Pose pose = youbot_proxy::TrajectoryGenerator::createPose(0.12, 0.25, -0.10, q);
-    if(!grabObjectAt(pose, m)) {
+    if(!m.grabObjectAt(pose)) {
         ROS_ERROR("main(): grabbing failed");
     }
 }

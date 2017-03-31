@@ -543,6 +543,7 @@ brics_actuator::JointPositions extractFirstPointPositions(const trajectory_msgs:
     const int n = 5; // TODO: use joint array
     // extract joint positions
     const trajectory_msgs::JointTrajectoryPoint point = traj.points.back(); // first point of trajectory
+    const std::vector<std::string> joint_names = traj.joint_names;
 
     // create joint position message
     brics_actuator::JointPositions jointPositions;
@@ -550,10 +551,7 @@ brics_actuator::JointPositions extractFirstPointPositions(const trajectory_msgs:
 
     // TODO: optimize with JOINT_NAMES-array
     for(int i=0; i<n;i++) {
-        std::stringstream ss;
-        ss.str("");
-        ss << "arm_joint_" << (i+1);
-        val.joint_uri = ss.str();
+        val.joint_uri = joint_names[i];
         val.unit = "rad";
         val.value = point.positions[i];
         jointPositions.positions.push_back(val);
@@ -565,19 +563,30 @@ brics_actuator::JointPositions extractFirstPointPositions(const trajectory_msgs:
 void correctGripperOrientation(double yaw, trajectory_msgs::JointTrajectory& traj) {
     ROS_INFO("Correcting gripper orientation ...");
     ROS_INFO("   init phase");
-    const int JOINT_5 = 4;
+
+    // find joint 5 index
+    const std::string ARM_JOINT_5 = "arm_joint_5";
+    int joint5 = 0;
+
+    for(int i=0; i<traj.joint_names.size(); i++) {
+        if(traj.joint_names[i] == ARM_JOINT_5) {
+            joint5 = i;
+            break;
+        }
+    }
+
     // positions
     double n = traj.points.size();
-    double origPos = traj.points[0].positions[JOINT_5];
+    double origPos = traj.points[0].positions[joint5];
     double goalPos = yaw;
     double incPos = (goalPos - origPos) / n;
     // velocities
-    double origVel = traj.points[0].velocities[JOINT_5];
-    double goalVel = traj.points[n-1].velocities[JOINT_5];
+    double origVel = traj.points[0].velocities[joint5];
+    double goalVel = traj.points[n-1].velocities[joint5];
     double incVel = (goalVel - origVel) / n;
     // accelerations
-    double origAcc = traj.points[0].accelerations[JOINT_5];
-    double goalAcc = traj.points[n-1].accelerations[JOINT_5];
+    double origAcc = traj.points[0].accelerations[joint5];
+    double goalAcc = traj.points[n-1].accelerations[joint5];
     double incAcc = (goalAcc - origAcc) / n;
 
     // effort?
@@ -586,18 +595,18 @@ void correctGripperOrientation(double yaw, trajectory_msgs::JointTrajectory& tra
     ROS_INFO("   interpolation phase");
     for(int i=0; i<n-1; i++) {
         trajectory_msgs::JointTrajectoryPoint* point = &traj.points[i];
-        point->positions[JOINT_5] = origPos + i * incPos;
-        point->velocities[JOINT_5] = origVel + i * incVel;
-        point->accelerations[JOINT_5] = origAcc + i * incAcc;
+        point->positions[joint5] = origPos + i * incPos;
+        point->velocities[joint5] = 0; //origVel + i * incVel;
+        point->accelerations[joint5] = 0; //origAcc + i * incAcc;
         // effort?
     }
 
     // end state:
     ROS_INFO("   end phase");
     trajectory_msgs::JointTrajectoryPoint* lastPoint = &traj.points[n-1];
-    lastPoint->positions[JOINT_5] = goalPos;
-    lastPoint->velocities[JOINT_5] = goalVel;
-    lastPoint->accelerations[JOINT_5] = goalAcc;
+    lastPoint->positions[joint5] = goalPos;
+    lastPoint->velocities[joint5] = goalVel;
+    lastPoint->accelerations[joint5] = goalAcc;
     // effort?
 
     ROS_INFO("... finished.");
@@ -731,7 +740,7 @@ void testTrajectory(ros::NodeHandle node, youbot_proxy::Manipulator& m) {
     trajectory_msgs::JointTrajectoryPoint p = cs2csTraj.points.back();
     std::stringstream sp;
     for(int i=0; i<p.positions.size(); i++) {
-        sp << p.positions[i] << "/";
+        sp << cs2csTraj.joint_names[i] << ":" << p.positions[i] << "/";
         //if(i == 1) cs2csTraj.points.back().positions[i] = p.positions[i] - 1;
     }
     ROS_INFO_STREAM("First point of cs2cs: " << sp.str());

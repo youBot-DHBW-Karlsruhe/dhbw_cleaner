@@ -724,10 +724,10 @@ void testTrajectory(ros::NodeHandle node, youbot_proxy::Manipulator& m) {
     // z -> top
     //                                                                      x,   y,   z
     geometry_msgs::Quaternion q = tf::createQuaternionMsgFromRollPitchYaw(0.0, 1.6, 0.0);
-    youbot_proxy::CSTrajectoryGenerator trajectory = m.getCSTrajectoryGenerator(0.29, 0.00, 0.05, q);
+    youbot_proxy::CSTrajectoryGenerator trajectory = m.getCSTrajectoryGenerator(0.27, 0.00, 0.05, q);
 
     // second point
-    if(!trajectory.createAndAddPose(0.29, 0.00, -0.10, q, 0.0)) {
+    if(!trajectory.createAndAddPose(0.27, 0.00, -0.10, q, 0.0)) {
         ROS_ERROR("Unable to create trajectory for 2 CS poses");
         return;
     }
@@ -788,7 +788,7 @@ void testTrajectory(ros::NodeHandle node, youbot_proxy::Manipulator& m) {
     // check and correct gripper orientation (yaw)
 
     //double yaw = M_PI_2; // PI/2: gripper is parallel to x
-    //correctGripperOrientation(yaw, traj);
+    //correctGripperOrientation(yaw, cs2csTraj);
 
 
     ROS_INFO("Moving along trajectory");

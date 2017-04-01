@@ -1,9 +1,11 @@
 #include "ros/ros.h"
 
+#include <math.h>
 #include <boost/assign/list_of.hpp>
+#include "Eigen/Dense"
 
-#include "torque_control/torque_trajectoryAction.h"
 #include "actionlib/client/simple_action_client.h"
+#include "torque_control/torque_trajectoryAction.h"
 #include "trajectory_generator/CStoCS.h"
 #include "trajectory_generator/JStoCS.h"
 #include "trajectory_generator/JStoJS.h"
@@ -13,10 +15,10 @@
 #include "brics_actuator/JointPositions.h"
 #include "sensor_msgs/JointState.h"
 
-#include "Eigen/Dense"
+#include "object_recognition/ObjectPosition.h"
+
 #include "tf/transform_datatypes.h"
 
-#include <math.h>
 
 namespace youbot_proxy {
 
@@ -723,6 +725,35 @@ class Manipulator {
 Manipulator::ConstJointNameArrayFiller Manipulator::armJointArrayFiller = Manipulator::ConstJointNameArrayFiller();
 Manipulator::ConstGripperNameArrayFiller Manipulator::gripperJointArrayFiller = Manipulator::ConstGripperNameArrayFiller();
 
+class ObjectDetectionListener {
+private:
+    ros::Subscriber objectPositionSubscriber;
+
+    geometry_msgs::Pose objectPosition;
+
+public:
+    ObjectDetectionListener(ros::NodeHandle node, std::string objectPositionTopic) {
+        objectPositionSubscriber = node.subscribe<object_recognition::ObjectPosition>(objectPositionTopic, 5, &ObjectDetectionListener::objectPositionCallback, this);
+    }
+
+    void objectPositionCallback(const object_recognition::ObjectPositionConstPtr& msg) {
+        //if(objectPosition->object_id != "") {
+        //    return;
+        //}
+        geometry_msgs::Pose pose;
+        pose.position = msg->pose.position;
+        pose.orientation = msg->pose.orientation;
+        objectPosition = pose;
+    }
+
+    geometry_msgs::Pose getObjectPosition() {
+        ros::spinOnce();
+        ros::Duration(0.5).sleep();
+        ros::spinOnce();
+        return objectPosition;
+    }
+};
+
 }
 
 //-------------------------------- FUNCTIONS ---------------------------------------------
@@ -813,16 +844,45 @@ int main(int argc, char** argv)
     // init node
     ros::init(argc, argv, "cleaner");
     ros::NodeHandle n;
-    ros::spinOnce();
+
+    // create classes
     youbot_proxy::Manipulator m(n);
+    youbot_proxy::ObjectDetectionListener objListener(n, "object_position");
+
+    ros::spinOnce();
     ros::spinOnce();
 
     //testTrajectory(n, m);
 
+    // retrieve object position
+    geometry_msgs::Pose objectPose = objListener.getObjectPosition();
+
+    // check orientation values
+    double roll, pitch, yaw;
+    tf::Quaternion quat;
+    tf::quaternionMsgToTF(objectPose.orientation, quat);
+    tf::Matrix3x3(quat).getRPY(roll, pitch, yaw);
+    ROS_INFO_STREAM("Object Orientation:\n Roll=" << roll << ", Pitch=" << pitch << ", Yaw=" << yaw);
+
+    /*
+    if(pitch != 0) pitch = 0;
+    if(yaw != 0) yaw = 0;
+    geometry_msgs::Quaternion q = tf::createQuaternionMsgFromRollPitchYaw(roll, pitch, yaw);
+    objectPose.orientation = q;
+    */
+
+    if(!m.grabObjectAt(objectPose)) {
+        ROS_ERROR("main(): grabbing failed");
+    }
+
+
+    // testcode
+    /*
     geometry_msgs::Quaternion q = tf::createQuaternionMsgFromRollPitchYaw(0.0, 0.0, 0.0);
     // examples: (0.12 / 0.25, -0.10), (0.29 / 0.00 / -0.10)
     geometry_msgs::Pose pose = youbot_proxy::TrajectoryGenerator::createPose(0.12, 0.25, -0.10, q);
     if(!m.grabObjectAt(pose)) {
         ROS_ERROR("main(): grabbing failed");
     }
+    */
 }

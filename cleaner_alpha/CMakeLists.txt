@@ -7,14 +7,17 @@ project(cleaner_alpha)
 find_package(catkin REQUIRED COMPONENTS
   tf
   geometry_msgs
+  sensor_msgs
+
   torque_control
   actionlib
   trajectory_generator
-  cmake_modules
-  sensor_msgs
-  Eigen
+  object_recognition
+
   roscpp
   cmake_modules
+
+  Eigen
 )
 
 ## System dependencies are found with CMake's conventions

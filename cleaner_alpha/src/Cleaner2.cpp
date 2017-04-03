@@ -22,6 +22,11 @@
 
 namespace youbot_proxy {
 
+#define ARM_POSE_INIT   {0.00004027682889217683, -0.0, -0.00010995574287564276, 0.0008185840012874813, 0.0023451325442290006}
+#define ARM_POSE_TOWER  {2.994239875087764, 1.1520884828390492, -2.700355965393107, 2.000221069091924, 2.9442475376037303}
+#define ARM_POSE_GRAB   {2.953187717239413, 2.4635926544333344, -1.7269394542799927, 2.8039599388965972, 2.933296211100019}
+#define ARM_POSE_DROP   {2.94689446272501, 0.08719933455156284, -2.822768123140233, 0.053185836191759595, 5.855950830183301}
+
 class TrajectoryGenerator {
 protected:
     trajectory_msgs::JointTrajectory t;
@@ -679,6 +684,8 @@ class Manipulator {
             ///////////////////////////////////////////////////////////////////////////
             // actual movement phase
             ///////////////////////////////////////////////////////////////////////////
+            // open gripper
+            this->openGripper();
 
             // move arm to start pose
             ROS_INFO("Moving arm to first position (js2js)");
@@ -686,9 +693,6 @@ class Manipulator {
                 ROS_ERROR("Could not move arm to start position. Execution of js2js trajectory failed.");
                 return false;
             }
-
-            // open gripper
-            this->openGripper();
 
             // move arm to grab position
             ROS_INFO("Moving arm to grab position (cs2cs)");
@@ -699,6 +703,8 @@ class Manipulator {
 
             // close gripper
             this->closeGripper();
+            ros::spinOnce();
+            ros::Duration(2.0).sleep();
 
             // move arm back to start position
             ROS_INFO("Moving arm back to start position (cs2cs)");
@@ -852,8 +858,22 @@ int main(int argc, char** argv)
     ros::spinOnce();
     ros::spinOnce();
 
-    //testTrajectory(n, m);
+    double observe_pose_far[5] = {3.007873581667766, 1.199917217148509, -2.552009960290597, 1.5187166851994713, 2.933163467748459};
+    double observe_pose_near[5] = {2.988721949529536, 1.141102977758708, -1.2992684737451308, 0.33778758193668285, 2.921747539514288};
 
+    // --------------- test move arm to joint pos -----------------------------
+    brics_actuator::JointPositions position;
+    for(int i=0; i<5; i++) {
+        brics_actuator::JointValue val;
+        val.joint_uri = m.ARM_JOINT_NAMES[i];
+        val.unit = "rad";
+        val.value = observe_pose_far[i];
+        position.positions.push_back(val);
+    }
+    m.moveArmToJointPosition(position);
+
+    // --------------- test grabbing with object recognition ------------------
+/*
     // retrieve object position
     geometry_msgs::Pose objectPose = objListener.getObjectPosition();
 
@@ -869,15 +889,14 @@ int main(int argc, char** argv)
     if(yaw != 0) yaw = 0;
     geometry_msgs::Quaternion q = tf::createQuaternionMsgFromRollPitchYaw(roll, pitch, yaw);
     objectPose.orientation = q;
-    */
+    *//*
 
     if(!m.grabObjectAt(objectPose)) {
         ROS_ERROR("main(): grabbing failed");
     }
-
-
-    // testcode
     /*
+
+    // old testcode
     geometry_msgs::Quaternion q = tf::createQuaternionMsgFromRollPitchYaw(0.0, 0.0, 0.0);
     // examples: (0.12 / 0.25, -0.10), (0.29 / 0.00 / -0.10)
     geometry_msgs::Pose pose = youbot_proxy::TrajectoryGenerator::createPose(0.12, 0.25, -0.10, q);

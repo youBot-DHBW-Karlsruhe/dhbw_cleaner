@@ -487,12 +487,12 @@ class Manipulator {
 
             armPositionSubscriber = node.subscribe<sensor_msgs::JointState>("/joint_states", 1, &Manipulator::armPositionHandler, this);
 
-            torqueController = new actionlib::SimpleActionClient<torque_control::torque_trajectoryAction>("torque_control", true);
+            torqueController = new actionlib::SimpleActionClient<torque_control::torque_trajectoryAction>("/torque_control", true);
             ROS_INFO_STREAM("Waiting " << timeout << " seconds for action server to start");
             torqueController->waitForServer(timeout);
             if(!torqueController->isServerConnected()) {
                 ROS_ERROR("Initialization failed: torque controller is not available");
-                EXIT_FAILURE;
+                exit(1);
             }
         }
 
@@ -569,7 +569,7 @@ class Manipulator {
             // move arm
             ROS_INFO("Moving arm to target position (js2js)");
             if(!this->move(js2jsTraj)) {
-                ROS_ERROR("Could not moarm_joint_2ve arm to target position. Execution of js2js trajectory failed.");
+                ROS_ERROR("Could not move arm to target position. Execution of js2js trajectory failed.");
                 return false;
             }
             return true;

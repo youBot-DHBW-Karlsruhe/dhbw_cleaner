@@ -17,9 +17,4 @@
 	<param name="transform_cloud_topic" type="string" value="/laser_point_cloud"/>
 	<param name="base_link" type="string" value="/base_link"/>
 
-
-
-	<!-- Launch torque controller node -->
-	<node name="torque_control" pkg="torque_control" type="torque_control" cwd="node" output="screen"/>
-
 </launch>

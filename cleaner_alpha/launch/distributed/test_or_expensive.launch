@@ -1,7 +1,5 @@
 <?xml version="1.0"?>
 <launch>
-	<!-- Launch torque controller node -->
-	<node name="torque_control" pkg="torque_control" type="torque_control" cwd="node" output="screen"/>
 
 	<!-- Launch the trajectory generator service -->
 	<node name="trajectory_generator" pkg="trajectory_generator" type="trajectory_service" output="screen" />
@@ -9,10 +7,10 @@
 	<node name="ik_solver_service" pkg="ik_solver_service" type="ik_solver_service" output="screen" />
 
 	<!-- launch find_object node for object detection -->
+<!--
 	<node name="find_object_3d" pkg="find_object_2d" type="find_object_2d" output="screen">
 		<param name="gui" value="true" type="bool"/>
 		<param name="settings_path" value="$(find object_recognition)/settings/object_recognition.ini" type="str"/>
-		<!--<param name="settings_path" value="~/.ros/find_object_2d.ini" type="str"/>-->
 		<param name="subscribe_depth" value="true" type="bool"/>
 		<param name="objects_path" value="$(find object_recognition)/objects/" type="str"/>
 		<param name="object_prefix" value="object" type="str"/>
@@ -21,9 +19,12 @@
 		<remap from="depth_registered/image_raw" to="camera/depth_registered/image_raw"/>
 		<remap from="depth_registered/camera_info" to="camera/depth_registered/camera_info"/>
 	</node>
+-->
 	
 	<!-- start our object detection node -->
+<!--
 	<node name="object_listener" pkg="object_recognition" type="object_recognition" output="screen"/>
+-->
 
 
 </launch>

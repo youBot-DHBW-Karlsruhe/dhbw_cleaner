@@ -4,10 +4,6 @@
 	<!-- Start the youbot -->
 	<include file="$(find cleaner_alpha)/launch/youbot_driver.launch" />
 
-	<!-- Upload youbot model to parameter server --> 
-	<!-- TODO: copy youbot.urdf.xacro -->
-	<param name="robot_description" command="$(find xacro)/xacro.py $(find grab_demo)/robots/youbot.urdf.xacro" />
-
 	<!-- Set transformation parameters -->
 	<param name="transform_cloud_topic" type="string" value="/laser_point_cloud"/>
 	<param name="base_link" type="string" value="/base_link"/>

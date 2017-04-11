@@ -17,11 +17,11 @@
 	<include file="$(find openni_launch)/launch/openni.launch" />
 -->
 
-	<!-- launch robot state publisher -->
-<!--
-	<node pkg="robot_state_publisher" type="robot_state_publisher" name="robot_state_publisher">
-		<param name="publish_frequency" type="double" value="100.0" />
-	</node>
--->	  
+	<!-- Upload youbot model to parameter server -->
+	<param name="robot_description" command="$(find xacro)/xacro.py $(find cleaner_alpha)/robots/youbot.urdf.xacro" />
+
+	<!-- start robot_state_publisher -->
+	<node pkg="robot_state_publisher" type="robot_state_publisher" name="robot_state_publisher" output="screen"/>
+	  
 </launch>
 

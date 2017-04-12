@@ -577,7 +577,7 @@ class Manipulator {
 
         bool grabObjectAt(const geometry_msgs::Pose& pose) {
             // configuration
-            double dGrabLine = 0.1;
+            double dGrabLine = 0.07;
             double gripperExt = 0; // TODO: test
             double joint_5_min = 0.1221730476;
             double joint_1_Aty0 = 2.9499152248919236;
@@ -736,27 +736,36 @@ private:
     ros::Subscriber objectPositionSubscriber;
 
     geometry_msgs::Pose objectPosition;
+    bool available;
 
 public:
     ObjectDetectionListener(ros::NodeHandle node, std::string objectPositionTopic) {
         objectPositionSubscriber = node.subscribe<object_recognition::ObjectPosition>(objectPositionTopic, 5, &ObjectDetectionListener::objectPositionCallback, this);
+        available = false;
     }
 
     void objectPositionCallback(const object_recognition::ObjectPositionConstPtr& msg) {
-        //if(objectPosition->object_id != "") {
+        //if(msg->object_id != "") {
         //    return;
         //}
+        ROS_INFO_STREAM("received aggregated position from " << msg->object_id);
         geometry_msgs::Pose pose;
         pose.position = msg->pose.position;
         pose.orientation = msg->pose.orientation;
         objectPosition = pose;
+        available = true;
     }
 
     geometry_msgs::Pose getObjectPosition() {
+        available = false;
+        return objectPosition;
+    }
+
+    bool isAvailable() {
         ros::spinOnce();
         ros::Duration(0.5).sleep();
         ros::spinOnce();
-        return objectPosition;
+        return available;
     }
 };
 
@@ -853,7 +862,7 @@ int main(int argc, char** argv)
 
     // create classes
     youbot_proxy::Manipulator m(n);
-    youbot_proxy::ObjectDetectionListener objListener(n, "object_position");
+    youbot_proxy::ObjectDetectionListener objListener(n, "object_position_single");
 
     ros::spinOnce();
     ros::spinOnce();
@@ -871,27 +880,37 @@ int main(int argc, char** argv)
         position.positions.push_back(val);
     }
     m.moveArmToJointPosition(position);
+    ros::Duration(2.0).sleep();
 
     // --------------- test grabbing with object recognition ------------------
-/*
-    // retrieve object position
-    geometry_msgs::Pose objectPose = objListener.getObjectPosition();
 
-    // check orientation values
-    double roll, pitch, yaw;
-    tf::Quaternion quat;
-    tf::quaternionMsgToTF(objectPose.orientation, quat);
-    tf::Matrix3x3(quat).getRPY(roll, pitch, yaw);
-    ROS_INFO_STREAM("Object Orientation:\n Roll=" << roll << ", Pitch=" << pitch << ", Yaw=" << yaw);
+    while(ros::ok()) {
+        // retrieve object position
+        ROS_INFO("Waiting for object detection");
+        while(!objListener.isAvailable() && ros::ok()) {}
+        geometry_msgs::Pose objectPose = objListener.getObjectPosition();
 
-    /*
-    if(pitch != 0) pitch = 0;
-    if(yaw != 0) yaw = 0;
-    geometry_msgs::Quaternion q = tf::createQuaternionMsgFromRollPitchYaw(roll, pitch, yaw);
-    objectPose.orientation = q;
-    *//*
+        // check orientation values
+        double roll, pitch, yaw;
+        tf::Quaternion quat;
+        tf::quaternionMsgToTF(objectPose.orientation, quat);
+        tf::Matrix3x3(quat).getRPY(roll, pitch, yaw);
+        ROS_INFO_STREAM("Object Position:\n x=" << objectPose.position.x << ", y=" << objectPose.position.y << ", z=" << objectPose.position.z);
+        ROS_INFO_STREAM("Object Orientation:\n Roll=" << roll << ", Pitch=" << pitch << ", Yaw=" << yaw);
 
-    if(!m.grabObjectAt(objectPose)) {
+
+        if(pitch != 0) pitch = 0;
+        if(yaw != 0) yaw = 0;
+        geometry_msgs::Quaternion q = tf::createQuaternionMsgFromRollPitchYaw(roll, pitch, yaw);
+        objectPose.orientation = q;
+
+        /*
+          range in 0.31 > std:sqrt(x² + y²)
+         */
+        if(m.grabObjectAt(objectPose)) {
+            ROS_ERROR("main(): grabbing successful");
+            break;
+        }
         ROS_ERROR("main(): grabbing failed");
     }
     /*

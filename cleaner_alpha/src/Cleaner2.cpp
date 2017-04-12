@@ -366,6 +366,8 @@ class Gripper {
 
         typedef ConstArray<std::string, 2> ConstGripperJointNameArray;
 
+        const std::string gripperValueMsgUnit;
+
 
         //----------------------- private members -----------------------------
         bool gripperOpen;
@@ -381,11 +383,11 @@ class Gripper {
             brics_actuator::JointValue rightGripperValue;
 
             leftGripperValue.joint_uri = GRIPPER_JOINT_NAMES[I_FINGER_LEFT];
-            leftGripperValue.unit = "m";
+            leftGripperValue.unit = gripperValueMsgUnit;
             leftGripperValue.value = left;
 
             rightGripperValue.joint_uri = GRIPPER_JOINT_NAMES[I_FINGER_RIGHT];
-            rightGripperValue.unit = "m";
+            rightGripperValue.unit = gripperValueMsgUnit;
             rightGripperValue.value = right;
 
             msg.positions.push_back(leftGripperValue);
@@ -406,13 +408,14 @@ class Gripper {
 
 
         //----------------------- public methods ------------------------------
-        Gripper(ros::NodeHandle node):
+        Gripper(ros::NodeHandle node, std::string gripperPositionCommand_topic = "/arm_1/gripper_controller/position_command"):
             I_FINGER_LEFT(0),
             I_FINGER_RIGHT(1),
             GRIPPER_JOINT_NAMES(gripperJointArrayFiller),
+            gripperValueMsgUnit("m"),
             gripperOpen(false)
         {
-            gripperPublisher = node.advertise<brics_actuator::JointPositions>("/arm_1/gripper_controller/position_command", 5);
+            gripperPublisher = node.advertise<brics_actuator::JointPositions>(gripperPositionCommand_topic, 5);
         }
 
         virtual ~Gripper() {}
@@ -509,6 +512,21 @@ class Manipulator {
             ROS_INFO("... finished.");
         }
 
+        std::vector<double> quaternionMsgToRPY(const geometry_msgs::Quaternion q) const {
+            std::vector<double> rpy;
+            double roll, pitch, yaw;
+
+            tf::Quaternion quat;
+            tf::quaternionMsgToTF(q, quat);
+            tf::Matrix3x3(quat).getRPY(roll, pitch, yaw);
+            rpy.push_back(roll);
+            rpy.push_back(pitch);
+            rpy.push_back(yaw);
+            ROS_INFO_STREAM("quaternionMsgToRPY: Roll=" << roll << ", Pitch=" << pitch << ", Yaw=" << yaw);
+
+            return rpy;
+        }
+
         bool move(const trajectory_msgs::JointTrajectory& traj ) {
             torque_control::torque_trajectoryGoal goal;
 
@@ -533,21 +551,6 @@ class Manipulator {
             }
         }
 
-        std::vector<double> quaternionMsgToRPY(const geometry_msgs::Quaternion q) const {
-            std::vector<double> rpy;
-            double roll, pitch, yaw;
-
-            tf::Quaternion quat;
-            tf::quaternionMsgToTF(q, quat);
-            tf::Matrix3x3(quat).getRPY(roll, pitch, yaw);
-            rpy.push_back(roll);
-            rpy.push_back(pitch);
-            rpy.push_back(yaw);
-            ROS_INFO_STREAM("quaternionMsgToRPY: Roll=" << roll << ", Pitch=" << pitch << ", Yaw=" << yaw);
-
-            return rpy;
-        }
-
     public:
         // constants
         const double DEFAULT_TIMEOUT;
@@ -567,11 +570,10 @@ class Manipulator {
             I_JOINT_4(3),
             I_JOINT_5(4),
             ARM_JOINT_NAMES(armJointArrayFiller),
+            timeout(ros::Duration(DEFAULT_TIMEOUT)),
             gripper(pGripper),
             trajGenFac(tgFactory)
         {
-            timeout = ros::Duration(DEFAULT_TIMEOUT);
-
             armPositionSubscriber = node.subscribe<sensor_msgs::JointState>(jointState_topic, 1, &Manipulator::armPositionHandler, this);
 
             torqueController = new actionlib::SimpleActionClient<torque_control::torque_trajectoryAction>(torqueAction_topic, true);
@@ -798,7 +800,6 @@ class Manipulator {
         }
 };
 
-//const std::vector<std::string> Manipulator::JOINT_NAMES = boost::assign::list_of("arm_joint_1", "arm_joint_2", "arm_joint_3", "arm_joint_4", "arm_joint_5");
 Manipulator::ConstJointNameArrayFiller Manipulator::armJointArrayFiller = Manipulator::ConstJointNameArrayFiller();
 
 Gripper::ConstGripperNameArrayFiller Gripper::gripperJointArrayFiller = Gripper::ConstGripperNameArrayFiller();
@@ -820,7 +821,6 @@ public:
         //if(msg->object_id != "") {
         //    return;
         //}
-        ROS_INFO_STREAM("received aggregated position from " << msg->object_id);
         geometry_msgs::Pose pose;
         pose.position = msg->pose.position;
         pose.orientation = msg->pose.orientation;
@@ -853,8 +853,8 @@ int main(int argc, char** argv)
 
     // create classes
     youbot_proxy::TrajectoryGeneratorFactory tgFactory(n);
-    youbot_proxy::Gripper gripper(n);
-    youbot_proxy::Manipulator m(n, gripper, tgFactory);
+    youbot_proxy::Gripper gripper(n, "/arm_1/gripper_controller/position_command");
+    youbot_proxy::Manipulator m(n, gripper, tgFactory, "/joint_states", "/torque_control");
     youbot_proxy::ObjectDetectionListener objListener(n, "object_position_single");
 
     ros::spinOnce();

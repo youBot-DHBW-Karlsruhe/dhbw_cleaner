@@ -147,6 +147,11 @@ target_link_libraries(cleaner
 
 add_executable(cleaner2
     src/Cleaner2.cpp
+    src/classes/JSTrajectoryGenerator.cpp
+    src/classes/CSTrajectoryGenerator.cpp
+    src/classes/TrajectoryGeneratorFactory.cpp
+    src/classes/Gripper.cpp
+    src/classes/Manipulator.cpp
 )
 add_dependencies(cleaner2
     ${catkin_EXPORTED_TARGETS}

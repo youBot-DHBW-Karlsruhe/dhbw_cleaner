@@ -128,37 +128,40 @@ include_directories(
 #  ${EIGEN_INCLUDE_DIR}
 )
 
-## Declare a C++ executable
-add_executable(cleaner
-    src/Cleaner.cpp
-    src/classes/Youbot.cpp
-    src/classes/Direction.cpp
-    src/classes/Manipulator.cpp
-)
-add_dependencies(cleaner
-    src/classes/Youbot.cpp
-    src/classes/Direction.cpp
-    src/classes/Manipulator.cpp
-    ${catkin_EXPORTED_TARGETS}
-)
-target_link_libraries(cleaner
-	${catkin_LIBRARIES}
-)
+## Declare libraries
+add_library(gripper			src/classes/Gripper.cpp)
+add_dependencies(gripper		${catkin_EXPORTED_TARGETS})
+target_link_libraries(gripper		${catkin_LIBRARIES})
 
-add_executable(cleaner2
-    src/Cleaner2.cpp
-    src/classes/JSTrajectoryGenerator.cpp
-    src/classes/CSTrajectoryGenerator.cpp
-    src/classes/TrajectoryGeneratorFactory.cpp
-    src/classes/Gripper.cpp
-    src/classes/Manipulator.cpp
-)
-add_dependencies(cleaner2
-    ${catkin_EXPORTED_TARGETS}
-)
-target_link_libraries(cleaner2
-	${catkin_LIBRARIES}
-)
+
+add_library(manipulator 		src/classes/Manipulator.cpp 
+					src/classes/JSTrajectoryGenerator.cpp
+					src/classes/CSTrajectoryGenerator.cpp
+					src/classes/TrajectoryGeneratorFactory.cpp)
+add_dependencies(manipulator    	${catkin_EXPORTED_TARGETS})
+target_link_libraries(manipulator	gripper
+					${catkin_LIBRARIES})
+
+
+add_library(youbot_base			src/classes/YoubotBase.cpp
+					src/classes/Direction.cpp)
+add_dependencies(youbot_base  		${catkin_EXPORTED_TARGETS})
+target_link_libraries(youbot_base	${catkin_LIBRARIES})
+
+
+
+## Declare C++ executables
+add_executable(cleaner			src/Cleaner.cpp)
+add_dependencies(cleaner		${catkin_EXPORTED_TARGETS})
+target_link_libraries(cleaner		manipulator
+					youbot_base
+					${catkin_LIBRARIES})
+
+
+add_executable(cleaner2			src/Cleaner2.cpp)
+add_dependencies(cleaner2		${catkin_EXPORTED_TARGETS})
+target_link_libraries(cleaner2		manipulator
+					${catkin_LIBRARIES})
 
 
 #############
@@ -195,18 +198,18 @@ install(DIRECTORY launch
 )
 
 ## Mark executables and/or libraries for installation
-# install(TARGETS laser_to_cloud laser_to_cloud_node
-#   ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
-#   LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
-#   RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
-# )
+install(TARGETS cleaner
+#  ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+#  LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+  RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+)
 
 ## Mark cpp header files for installation
-# install(DIRECTORY include/${PROJECT_NAME}/
-#   DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION}
-#   FILES_MATCHING PATTERN "*.h"
-#   PATTERN ".svn" EXCLUDE
-# )
+install(DIRECTORY include/${PROJECT_NAME}/
+  DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION}
+  FILES_MATCHING PATTERN "*.h"
+  PATTERN ".svn" EXCLUDE
+)
 
 ## Mark other files for installation (e.g. launch and bag files, etc.)
 # install(FILES

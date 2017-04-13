@@ -1,6 +1,6 @@
 #include "ros/ros.h"
 #include "geometry_msgs/Point32.h"
-#include "cleaner_alpha/Youbot.h"
+#include "cleaner_alpha/YoubotBase.h"
 #include "object_finder_2d/NearestPoint.h"
 
 class Cleaner {
@@ -38,7 +38,7 @@ int main(int argc, char** argv)
   ros::NodeHandle n;
 
   Cleaner c(n);
-  youbot_proxy::Youbot youbot(youbot_proxy::Youbot::DEFAULT_POINT_SECONDS, youbot_proxy::Youbot::DEFAULT_SPEED);
+  youbot_proxy::YoubotBase youbot(youbot_proxy::YoubotBase::DEFAULT_POINT_SECONDS, youbot_proxy::YoubotBase::DEFAULT_SPEED);
   if(!youbot.initialize(n)) {
       ROS_ERROR("Could not initialize youbot proxy application. The driver may not be started yet?");
       return 1;

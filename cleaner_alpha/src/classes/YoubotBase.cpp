@@ -1,4 +1,4 @@
-#include "cleaner_alpha/Youbot.h"
+#include "cleaner_alpha/YoubotBase.h"
 
 
 namespace youbot_proxy {
@@ -6,7 +6,7 @@ namespace youbot_proxy {
 ///////////////////////////////////////////////////////////////////////////////
 // public methods
 ///////////////////////////////////////////////////////////////////////////////
-bool Youbot::initialize(ros::NodeHandle node) {
+bool YoubotBase::initialize(ros::NodeHandle node) {
     // create stop message
     geometry_msgs::Twist msg;
     msg.linear.x = 0;
@@ -52,7 +52,7 @@ bool Youbot::initialize(ros::NodeHandle node) {
     return true;
 }
 
-bool Youbot::grab() {
+bool YoubotBase::grab() {
     ROS_INFO("creating demo trajectory points for grab and moving arm");
     double poseGrab[this->DOF] = ARM_POSE_GRAB;
     if(!this->moveArmToPose(poseGrab)) {
@@ -72,7 +72,7 @@ bool Youbot::grab() {
     return true;
 }
 
-bool Youbot::drop() {
+bool YoubotBase::drop() {
     ROS_INFO("creating demo trajectory points for drop and moving arm");
     double poseDrop[this->DOF] = ARM_POSE_DROP;
     if(!this->moveArmToPose(poseDrop)) {
@@ -92,7 +92,7 @@ bool Youbot::drop() {
     return true;
 }
 
-bool Youbot::returnToInitPose() {
+bool YoubotBase::returnToInitPose() {
     ROS_INFO("creating demo trajectory points for initial pose and moving arm");
     double poseInit[this->DOF] = ARM_POSE_INIT;
     if(!this->moveArmToPose(poseInit)) {
@@ -106,19 +106,19 @@ bool Youbot::returnToInitPose() {
     return true;
 }
 
-void Youbot::openGripper() {
+void YoubotBase::openGripper() {
     brics_actuator::JointPositions gripperPositionMsg = this->createGripperPositionMsg(0.0115, 0.0115);
     this->sendGripperPositionMsg(gripperPositionMsg);
     ROS_INFO("Gripper opened");
 }
 
-void Youbot::closeGripper() {
+void YoubotBase::closeGripper() {
     brics_actuator::JointPositions gripperPositionMsg = this->createGripperPositionMsg(0.0, 0.0);
     this->sendGripperPositionMsg(gripperPositionMsg);
     ROS_INFO("Gripper closed");
 }
 
-bool Youbot::moveArmToPose(const double pose[DOF]) {
+bool YoubotBase::moveArmToPose(const double pose[DOF]) {
     // create goal and send to action server
     double points[1][this->DOF];
     for (int i = 0; i < this->DOF; i++) {
@@ -132,7 +132,7 @@ bool Youbot::moveArmToPose(const double pose[DOF]) {
     return true;
 }
 
-void Youbot::moveBase(const Direction *direction, double distanceInMeters) {
+void YoubotBase::moveBase(const Direction *direction, double distanceInMeters) {
     geometry_msgs::Twist moveMsg;
 
     if(speed <= 0) {
@@ -185,7 +185,7 @@ void Youbot::moveBase(const Direction *direction, double distanceInMeters) {
     this->pubBase.publish(this->stopMsg);
 }
 
-void Youbot::moveBase(double x, double y) {
+void YoubotBase::moveBase(double x, double y) {
     geometry_msgs::Twist moveMsg;
 
     if(speed <= 0) {
@@ -209,11 +209,11 @@ void Youbot::moveBase(double x, double y) {
     this->pubBase.publish(this->stopMsg);
 }
 
-void Youbot::turnBaseDeg(double angleInDeg) {
+void YoubotBase::turnBaseDeg(double angleInDeg) {
     this->turnBaseRad(DEG_TO_RAD(angleInDeg));
 }
 
-void Youbot::turnBaseRad(double angleInRad) {
+void YoubotBase::turnBaseRad(double angleInRad) {
     //double speed = 0.5;
 
     if(angleInRad == 0) {
@@ -234,7 +234,7 @@ void Youbot::turnBaseRad(double angleInRad) {
 ///////////////////////////////////////////////////////////////////////////////
 // private methods
 ///////////////////////////////////////////////////////////////////////////////
-control_msgs::FollowJointTrajectoryGoal Youbot::createTrajectoryGoal(const int nPoints, const double jointAngles[][DOF], double pointSeconds) {
+control_msgs::FollowJointTrajectoryGoal YoubotBase::createTrajectoryGoal(const int nPoints, const double jointAngles[][DOF], double pointSeconds) {
     control_msgs::FollowJointTrajectoryGoal msg;
 
     // set values for all points of trajectory
@@ -259,7 +259,7 @@ control_msgs::FollowJointTrajectoryGoal Youbot::createTrajectoryGoal(const int n
     return msg;
 }
 
-brics_actuator::JointPositions Youbot::createGripperPositionMsg(double left, double right) {
+brics_actuator::JointPositions YoubotBase::createGripperPositionMsg(double left, double right) {
     brics_actuator::JointPositions msg;
     brics_actuator::JointValue leftGripperValue;
     brics_actuator::JointValue rightGripperValue;
@@ -277,7 +277,7 @@ brics_actuator::JointPositions Youbot::createGripperPositionMsg(double left, dou
     return msg;
 }
 
-bool Youbot::sendTrajectoryGoalAndWaitForResponse(const std::string frame, const control_msgs::FollowJointTrajectoryGoal goal) {
+bool YoubotBase::sendTrajectoryGoalAndWaitForResponse(const std::string frame, const control_msgs::FollowJointTrajectoryGoal goal) {
     control_msgs::FollowJointTrajectoryGoal trajectoryGoalMsg(goal);
 
     ROS_INFO("Sending goal to action server and waiting for result...");
@@ -298,7 +298,7 @@ bool Youbot::sendTrajectoryGoalAndWaitForResponse(const std::string frame, const
     return false;
 }
 
-void Youbot::sendGripperPositionMsg(const brics_actuator::JointPositions msg) {
+void YoubotBase::sendGripperPositionMsg(const brics_actuator::JointPositions msg) {
     this->pubArm.publish(msg);
 }
 

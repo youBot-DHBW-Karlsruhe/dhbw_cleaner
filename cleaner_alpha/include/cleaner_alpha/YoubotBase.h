@@ -1,5 +1,5 @@
-#ifndef CLEANER_ALPHA_YOUBOT_H
-#define CLEANER_ALPHA_YOUBOT_H
+#ifndef YOUBOT_BASE_H
+#define YOUBOT_BASE_H
 
 #include "ros/ros.h"
 #include "actionlib/client/simple_action_client.h"
@@ -36,7 +36,7 @@ class Direction {
         bool isDiagonal() const;
 };
 
-class Youbot {
+class YoubotBase {
     public:
         // constant members
         static const int DOF = 5;
@@ -45,20 +45,20 @@ class Youbot {
         static const double DEFAULT_SPEED = 0.1;
 
         // constructor
-        Youbot():
+        YoubotBase():
             pointSeconds(DEFAULT_POINT_SECONDS),
             speed(DEFAULT_SPEED){}
 
-        Youbot(double movementSecondsForEachPoint):
+        YoubotBase(double movementSecondsForEachPoint):
             pointSeconds(std::abs(movementSecondsForEachPoint)),
             speed(DEFAULT_SPEED){}
 
-        Youbot(double movementSecondsForEachPoint, double baseMovementSpeed):
+        YoubotBase(double movementSecondsForEachPoint, double baseMovementSpeed):
             pointSeconds(std::abs(movementSecondsForEachPoint)),
             speed(std::abs(baseMovementSpeed)){}
 
         // destructor
-        ~Youbot() {
+        ~YoubotBase() {
             delete actionClient;
         }
 
@@ -130,8 +130,8 @@ class Youbot {
         ros::Publisher pubBase;
 
         // disable copy-constructor and assignment operator
-        Youbot(const Youbot &);
-        void operator=(const Youbot &);
+        YoubotBase(const YoubotBase &);
+        void operator=(const YoubotBase &);
 
         // methods
         /**
@@ -157,4 +157,4 @@ class Youbot {
 };
 
 }
-#endif // CLEANER_ALPHA_YOUBOT_HH
+#endif // YOUBOT_BASE_H

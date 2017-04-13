@@ -64,7 +64,7 @@ class Manipulator {
         const int I_JOINT_5;
         const ConstArmJointNameArray ARM_JOINT_NAMES;
 
-        Manipulator(ros::NodeHandle node, Gripper pGripper, TrajectoryGeneratorFactory tgFactory,
+        Manipulator(ros::NodeHandle& node, const Gripper& pGripper, const TrajectoryGeneratorFactory& tgFactory,
                     std::string jointState_topic = "/joint_states", std::string torqueAction_topic = "/torque_control");
 
         ~Manipulator();

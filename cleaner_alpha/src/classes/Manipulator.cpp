@@ -1,5 +1,8 @@
 #include "cleaner_alpha/Manipulator.h"
 
+#include "cleaner_alpha/CSTrajectoryGenerator.h"
+#include "cleaner_alpha/JSTrajectoryGenerator.h"
+
 #include "tf/transform_datatypes.h"
 #include <math.h>
 
@@ -105,7 +108,8 @@ bool Manipulator::move(const trajectory_msgs::JointTrajectory& traj ) {
 ///////////////////////////////////////////////////////////////////////////////
 // public methods
 ///////////////////////////////////////////////////////////////////////////////
-Manipulator::Manipulator(ros::NodeHandle node, Gripper pGripper, TrajectoryGeneratorFactory tgFactory, std::string jointState_topic, std::string torqueAction_topic):
+Manipulator::Manipulator(ros::NodeHandle& node, const Gripper& pGripper, const TrajectoryGeneratorFactory& tgFactory,
+                         std::string jointState_topic, std::string torqueAction_topic):
     DEFAULT_TIMEOUT(20),
     I_JOINT_1(0),
     I_JOINT_2(1),

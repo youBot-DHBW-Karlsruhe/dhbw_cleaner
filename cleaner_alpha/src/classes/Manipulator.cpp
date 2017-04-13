@@ -19,6 +19,22 @@ Manipulator::ConstJointNameArrayFiller Manipulator::armJointArrayFiller = Manipu
 ///////////////////////////////////////////////////////////////////////////////
 // private methods
 ///////////////////////////////////////////////////////////////////////////////
+const util::Pose Manipulator::createPose(const ConstArmJointNameArray& jointArray){
+    // create pose object and initialize the poses
+    double defaultPose[5] = ARM_POSE_INIT;
+    util::Pose pose(jointArray.getArray(), jointArray.size(), defaultPose);
+    double poseObserve[5] = ARM_POSE_OBSERVE_FAR;
+    pose.addPose(util::Pose::OBSERVE_FAR, poseObserve);
+    double poseObserveNear[5] = ARM_POSE_OBSERVE_NEAR;
+    pose.addPose(util::Pose::OBSERVE_NEAR, poseObserveNear);
+    double poseTower[5] = ARM_POSE_TOWER;
+    pose.addPose(util::Pose::TOWER, poseTower);
+    double poseDrop[5] = ARM_POSE_DROP;
+    pose.addPose(util::Pose::DROP_AT_PLATE, poseDrop);
+
+    return pose;
+}
+
 brics_actuator::JointPositions Manipulator::extractFirstPointPositions(const trajectory_msgs::JointTrajectory& traj) const {
     // extract joint positions and names
     const trajectory_msgs::JointTrajectoryPoint point = traj.points.back(); // first point of trajectory
@@ -119,7 +135,8 @@ Manipulator::Manipulator(ros::NodeHandle& node, const Gripper& pGripper, const T
     ARM_JOINT_NAMES(armJointArrayFiller),
     timeout(ros::Duration(DEFAULT_TIMEOUT)),
     gripper(pGripper),
-    trajGenFac(tgFactory)
+    trajGenFac(tgFactory),
+    POSE(createPose(ARM_JOINT_NAMES))
 {
     armPositionSubscriber = node.subscribe<sensor_msgs::JointState>(jointState_topic, 1, &Manipulator::armPositionHandler, this);
 
@@ -171,6 +188,12 @@ void Manipulator::closeGripper() {
     gripper.closeGripper();
 }
 
+bool Manipulator::moveArmToPose(util::Pose::POSE_ID poseId) {
+// ############################################################################
+// TODO: test
+    return moveArmToJointPosition(POSE.jointPositions(poseId));
+// ############################################################################
+}
 
 bool Manipulator::moveArmToJointPosition(const brics_actuator::JointPositions& targetPosition) {
     ROS_INFO("Generating trajectory to joint position (js2js)");

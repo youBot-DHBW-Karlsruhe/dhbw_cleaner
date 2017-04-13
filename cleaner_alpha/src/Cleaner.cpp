@@ -1,21 +1,23 @@
 #include "ros/ros.h"
 #include "geometry_msgs/Point32.h"
 #include "object_finder_2d/NearestPoint.h"
+#include "object_recognition/ObjectPosition.h"
 #include "cleaner_alpha/YoubotBase.h"
 #include "cleaner_alpha/Manipulator.h"
 #include "cleaner_alpha/Gripper.h"
 
-class Cleaner {
+
+class NearestPointServiceClient {
 private:
     ros::ServiceClient nearestPointService;
     geometry_msgs::Point32 point;
 
 
 public:
-    Cleaner(ros::NodeHandle n) {
-        ros::service::waitForService("nearest_point");
-        nearestPointService = n.serviceClient<object_finder_2d::NearestPoint>("nearest_point");
-        ROS_INFO("Cleaner: Initialized");
+    NearestPointServiceClient(ros::NodeHandle& n, std::string nearestPointService_name = "nearest_point") {
+        ros::service::waitForService(nearestPointService_name);
+        nearestPointService = n.serviceClient<object_finder_2d::NearestPoint>(nearestPointService_name);
+        ROS_INFO("NearestPointServiceClient: Initialized");
     }
 
     geometry_msgs::Point32 nearestPoint() {
@@ -24,11 +26,48 @@ public:
         if(nearestPointService.call(srv)) {
             return srv.response.point;
         } else {
-            ROS_ERROR("Cleaner: Request to nearest_point service failed");
+            ROS_ERROR("NearestPointServiceClient: Request to nearest_point service failed");
             return geometry_msgs::Point32();
         }
     }
 
+};
+
+class ObjectDetectionListener {
+private:
+    ros::Subscriber objectPositionSubscriber;
+
+    geometry_msgs::Pose objectPosition;
+    bool available;
+
+public:
+    ObjectDetectionListener(ros::NodeHandle& node, std::string objectPositionTopic = "object_position_single") {
+        objectPositionSubscriber = node.subscribe<object_recognition::ObjectPosition>(objectPositionTopic, 5, &ObjectDetectionListener::objectPositionCallback, this);
+        available = false;
+    }
+
+    void objectPositionCallback(const object_recognition::ObjectPositionConstPtr& msg) {
+        //if(msg->object_id != "") {
+        //    return;
+        //}
+        geometry_msgs::Pose pose;
+        pose.position = msg->pose.position;
+        pose.orientation = msg->pose.orientation;
+        objectPosition = pose;
+        available = true;
+    }
+
+    geometry_msgs::Pose getObjectPosition() {
+        available = false;
+        return objectPosition;
+    }
+
+    bool isAvailable() {
+        ros::spinOnce();
+        ros::Duration(0.5).sleep();
+        ros::spinOnce();
+        return available;
+    }
 };
 
 
@@ -40,7 +79,8 @@ int main(int argc, char** argv)
   ros::NodeHandle n;
 
   // initialize classes
-  Cleaner c(n);
+  NearestPointServiceClient nearestPointService(n, "nearest_point");
+  ObjectDetectionListener objectDetection(n, "object_position_aggregated");
   youbot_proxy::YoubotBase youbot(n, "/cmd_vel", youbot_proxy::YoubotBase::DEFAULT_POINT_SECONDS, youbot_proxy::YoubotBase::DEFAULT_SPEED);
   youbot_proxy::TrajectoryGeneratorFactory tgFactory(n);
   youbot_proxy::Gripper gripper(n, "/arm_1/gripper_controller/position_command");
@@ -55,7 +95,7 @@ int main(int argc, char** argv)
   geometry_msgs::Point32 goalPosition;
   goalPosition.x = 0.5;
   goalPosition.y = 0;
-  geometry_msgs::Point32 p = c.nearestPoint();
+  geometry_msgs::Point32 p = nearestPointService.nearestPoint();
   double tol = 0.03;
 
   // print point coordinates
@@ -73,7 +113,7 @@ int main(int argc, char** argv)
 
   // correct position to fit a good grabbing position iteratively
   bool grabPositionReached = false;
-  geometry_msgs::Point32 objectPos = c.nearestPoint();
+  geometry_msgs::Point32 objectPos = nearestPointService.nearestPoint();
   while(!grabPositionReached && ros::ok()) {
       double angle, diagMovement;
 
@@ -95,7 +135,7 @@ int main(int argc, char** argv)
       youbot.move(diagMovement, goalPosition.y);
 
       // check position
-      objectPos = c.nearestPoint();
+      objectPos = nearestPointService.nearestPoint();
       if(std::abs(objectPos.y) <= tol && objectPos.x >= goalPosition.x-tol && objectPos.x <= goalPosition.x+tol) {
           grabPositionReached = true;
       }

@@ -137,7 +137,8 @@ target_link_libraries(gripper		${catkin_LIBRARIES})
 add_library(manipulator 		src/classes/Manipulator.cpp 
 					src/classes/JSTrajectoryGenerator.cpp
 					src/classes/CSTrajectoryGenerator.cpp
-					src/classes/TrajectoryGeneratorFactory.cpp)
+                                        src/classes/TrajectoryGeneratorFactory.cpp
+                                        src/classes/Pose.cpp)
 add_dependencies(manipulator    	${catkin_EXPORTED_TARGETS})
 target_link_libraries(manipulator	gripper
 					${catkin_LIBRARIES})

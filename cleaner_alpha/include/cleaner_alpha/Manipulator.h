@@ -88,6 +88,9 @@ class Manipulator {
 
 
         bool grabObjectAt(const geometry_msgs::Pose& pose);
+
+
+        bool returnToInit();
 };
 
 }

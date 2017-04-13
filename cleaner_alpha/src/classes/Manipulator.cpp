@@ -362,11 +362,13 @@ bool Manipulator::grabObjectAt(const geometry_msgs::Pose& pose) {
     brics_actuator::JointPositions interPos = currentJointPositions; // in this case it's the init position
     this->moveArmToJointPosition(interPos);
 
-    // dropping or transporting???
-
-
     // finished
     return true;
+}
+
+bool Manipulator::returnToInit() {
+    closeGripper();
+    return moveArmToPose(util::Pose::INIT);
 }
 
 }

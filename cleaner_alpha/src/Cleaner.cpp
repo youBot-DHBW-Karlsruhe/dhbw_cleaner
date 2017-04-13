@@ -1,7 +1,9 @@
 #include "ros/ros.h"
 #include "geometry_msgs/Point32.h"
-#include "cleaner_alpha/YoubotBase.h"
 #include "object_finder_2d/NearestPoint.h"
+#include "cleaner_alpha/YoubotBase.h"
+#include "cleaner_alpha/Manipulator.h"
+#include "cleaner_alpha/Gripper.h"
 
 class Cleaner {
 private:
@@ -37,12 +39,13 @@ int main(int argc, char** argv)
   ros::init(argc, argv, "cleaner");
   ros::NodeHandle n;
 
+  // initialize classes
   Cleaner c(n);
-  youbot_proxy::YoubotBase youbot(youbot_proxy::YoubotBase::DEFAULT_POINT_SECONDS, youbot_proxy::YoubotBase::DEFAULT_SPEED);
-  if(!youbot.initialize(n)) {
-      ROS_ERROR("Could not initialize youbot proxy application. The driver may not be started yet?");
-      return 1;
-  }
+  youbot_proxy::YoubotBase youbot(n, "/cmd_vel", youbot_proxy::YoubotBase::DEFAULT_POINT_SECONDS, youbot_proxy::YoubotBase::DEFAULT_SPEED);
+  youbot_proxy::TrajectoryGeneratorFactory tgFactory(n);
+  youbot_proxy::Gripper gripper(n, "/arm_1/gripper_controller/position_command");
+  youbot_proxy::Manipulator manipulator(n, gripper, tgFactory, "/joint_states", "/torque_control");
+
   ROS_INFO("----- youbot proxy and cleaner running");
   ROS_INFO("--------------------------------------");
 
@@ -60,14 +63,13 @@ int main(int argc, char** argv)
 
   if(std::abs(p.x) <= tol && std::abs(p.y) <= tol) {
       ROS_ERROR("Point was nearly (0/0)!!");
-      youbot.returnToInitPose();
       return 1;
   }
 
   // reduce distance and move base directly to the found point
   p.x = p.x - (goalPosition.x + 0.2);
   p.y = p.y - goalPosition.y;
-  youbot.moveBase(p.x, p.y);
+  youbot.move(p.x, p.y);
 
   // correct position to fit a good grabbing position iteratively
   bool grabPositionReached = false;
@@ -86,11 +88,11 @@ int main(int argc, char** argv)
       // - -> left
       // + -> right
       angle = std::asin(objectPos.y/objectPos.x);
-      youbot.turnBaseRad(angle);
+      youbot.turnRad(angle);
 
       // move base straight forward towards the object
       diagMovement = std::sqrt(std::pow(objectPos.x, 2) + std::pow(objectPos.y, 2)) - goalPosition.x;
-      youbot.moveBase(diagMovement, goalPosition.y);
+      youbot.move(diagMovement, goalPosition.y);
 
       // check position
       objectPos = c.nearestPoint();
@@ -104,19 +106,19 @@ int main(int argc, char** argv)
   ros::Duration(1).sleep();
 
   // just move slightly forward
-  youbot.moveBase(0.05, 0.0);
+  youbot.move(0.05, 0.0);
 
   ros::Duration(1).sleep();
   //TODO: insert object detection or position check with cemara here!
 
   // grab the object
-  youbot.grab();
-  youbot.drop();
-
+  /*
+  manipulator.grab();
+  manipulator.drop();
+  */
 
   //TODO: later on: build a loop
 
   // exit cleaner-mode and return youBot to initial pose
-  youbot.returnToInitPose();
   return 0;
 }

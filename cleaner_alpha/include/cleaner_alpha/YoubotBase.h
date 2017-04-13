@@ -45,78 +45,35 @@ class YoubotBase {
         static const double DEFAULT_SPEED = 0.1;
 
         // constructor
-        YoubotBase():
-            pointSeconds(DEFAULT_POINT_SECONDS),
-            speed(DEFAULT_SPEED){}
+        YoubotBase(ros::NodeHandle& node, std::string base_vel_topic = "/cmd_vel");
 
-        YoubotBase(double movementSecondsForEachPoint):
-            pointSeconds(std::abs(movementSecondsForEachPoint)),
-            speed(DEFAULT_SPEED){}
+        YoubotBase(ros::NodeHandle& node, std::string base_vel_topic, double movementSecondsForEachPoint);
 
-        YoubotBase(double movementSecondsForEachPoint, double baseMovementSpeed):
-            pointSeconds(std::abs(movementSecondsForEachPoint)),
-            speed(std::abs(baseMovementSpeed)){}
+        YoubotBase(ros::NodeHandle& node, std::string base_vel_topic, double movementSecondsForEachPoint, double baseMovementSpeed);
 
         // destructor
-        ~YoubotBase() {
-            delete actionClient;
-        }
+        virtual ~YoubotBase();
 
         // methods
         /**
-         * Initializes the youBot.
-         */
-        bool initialize(ros::NodeHandle node);
-
-        /**
-         * Performs an object grab in front of the youBot.
-         */
-        bool grab();
-
-        /**
-         * Drops a grabbed object on the metal plate of the youBot.
-         */
-        bool drop();
-
-        /**
-         * Returns arm and gripper to the initial pose of the youbot driver.
-         */
-        bool returnToInitPose();
-
-        /**
-         * Open gripper -> drop an object.
-         */
-        void openGripper();
-
-        /**
-         * Close gripper -> grab an object.
-         */
-        void closeGripper();
-
-        /**
-         * Moves youBot arm to the specified pose. The pose is in joint space and depends on the DOF member.
-         */
-        bool moveArmToPose(const double pose[DOF]);
-
-        /**
          * Moves the base distanceInMeters meter in the specified direction. This function blocks the current thread.
          */
-        void moveBase(const Direction *direction, double distanceInMeters);
+        void move(const Direction *direction, double distanceInMeters);
 
         /**
          * Move base x meters right and y meters forward. This function blocks the current thread.
          */
-        void moveBase(double x, double y);
+        void move(double x, double y);
 
         /**
          * Turns the base in z (left). Negative values corresponds to the other direction (right).
          */
-        void turnBaseRad(double angleInRad);
+        void turnRad(double angleInRad);
 
         /**
          * Turns the base in z (left). Negative values corresponds to the other direction (right).
          */
-        void turnBaseDeg(double angleInDeg);
+        void turnDeg(double angleInDeg);
 
     private:
         // constants
@@ -125,8 +82,6 @@ class YoubotBase {
         geometry_msgs::Twist stopMsg;
 
         // member
-        actionlib::SimpleActionClient<control_msgs::FollowJointTrajectoryAction>* actionClient;
-        ros::Publisher pubArm;
         ros::Publisher pubBase;
 
         // disable copy-constructor and assignment operator
@@ -134,26 +89,7 @@ class YoubotBase {
         void operator=(const YoubotBase &);
 
         // methods
-        /**
-         * Creates a trajectory message compliant to the youBot follow_joint_trajectory topic.
-         */
-        control_msgs::FollowJointTrajectoryGoal createTrajectoryGoal(int nPoints, const double jointAngles[][DOF], double pointSeconds);
-
-        /**
-         * Creates a message compliant to the youBot gripper_controller/position_command topic.
-         */
-        brics_actuator::JointPositions createGripperPositionMsg(double left, double right);
-
-        /**
-         * Sends a trajectory message to the youBot arm.
-         */
-        bool sendTrajectoryGoalAndWaitForResponse(const std::string frame, const control_msgs::FollowJointTrajectoryGoal goal);
-
-        /**
-         * Sends a position message to the gripper on arm_1.
-         */
-        void sendGripperPositionMsg(const brics_actuator::JointPositions msg);
-
+        void initialize(ros::NodeHandle& node, std::string base_vel_topic);
 };
 
 }

@@ -9,6 +9,9 @@
 #include "cleaner_alpha/Manipulator.h"
 #include "cleaner_alpha/Gripper.h"
 
+// for testing only!
+#include <iostream>
+
 
 class NearestPointServiceClient {
 private:
@@ -98,9 +101,9 @@ int main(int argc, char** argv)
     // run this node
     // ------------------------------------------------------------------------
     // assuming that youbot base_link is at (0/0)
-    // target: object at (0/0.5)
+    // target: object at (0/0.4)
     geometry_msgs::Point32 goalPosition;
-    goalPosition.x = 0.5;
+    goalPosition.x = 0.4;
     goalPosition.y = 0;
     geometry_msgs::Point32 p = nearestPointService.nearestPoint();
     double tol = 0.03;
@@ -124,6 +127,10 @@ int main(int argc, char** argv)
     // ------------------------------------------------------------------------
     double angle, diagMovement;
 
+    ROS_INFO("Enter to start movement");
+    int x;
+    std::cin >> x;
+
     // turn base into direction of the object
     // - -> left
     // + -> right
@@ -140,6 +147,9 @@ int main(int argc, char** argv)
 
     // unfold arm
     // ------------------------------------------------------------------------
+    ROS_INFO("Enter to start unfolding arm");
+    std::cin >> x;
+
     if(!manipulator.moveArmToPose(youbot_proxy::util::Pose::OBSERVE_FAR)) {
       ROS_ERROR("Could not move arm to OBSERVE pose!");
       return 1;
@@ -156,6 +166,9 @@ int main(int argc, char** argv)
       while(!objectDetection.isAvailable() && ros::ok()) {}
       geometry_msgs::Pose objectPose = objectDetection.getObjectPosition();
       ROS_INFO("... received object coordinates");
+
+      ROS_INFO("Enter to start grasping the object");
+      std::cin >> x;
 
       // check orientation values
       double roll, pitch, yaw;
@@ -194,6 +207,9 @@ int main(int argc, char** argv)
 
     // exit cleaner-mode and return youBot to initial pose
     // ------------------------------------------------------------------------
+    ROS_INFO("Enter to return arm to init pose");
+    std::cin >> x;
+
     if(!manipulator.returnToInit()) {
       ROS_ERROR("Could not move arm to INIT pose!");
     }

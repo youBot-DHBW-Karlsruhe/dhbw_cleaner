@@ -19,21 +19,21 @@ Manipulator::ConstJointNameArrayFiller Manipulator::armJointArrayFiller = Manipu
 ///////////////////////////////////////////////////////////////////////////////
 // private methods
 ///////////////////////////////////////////////////////////////////////////////
-const util::Pose Manipulator::createPose(const ConstArmJointNameArray& jointArray){
-    // create pose object and initialize the poses
-    double defaultPose[5] = ARM_POSE_INIT;
-    util::Pose pose(jointArray.getArray(), jointArray.size(), defaultPose);
-    double poseObserve[5] = ARM_POSE_OBSERVE_FAR;
-    pose.addPose(util::Pose::OBSERVE_FAR, poseObserve);
-    double poseObserveNear[5] = ARM_POSE_OBSERVE_NEAR;
-    pose.addPose(util::Pose::OBSERVE_NEAR, poseObserveNear);
-    double poseTower[5] = ARM_POSE_TOWER;
-    pose.addPose(util::Pose::TOWER, poseTower);
-    double poseDrop[5] = ARM_POSE_DROP;
-    pose.addPose(util::Pose::DROP_AT_PLATE, poseDrop);
+//const util::Pose Manipulator::createPose(const ConstArmJointNameArray& jointArray){
+//    // create pose object and initialize the poses
+//    double defaultPose[5] = ARM_POSE_INIT;
+//    util::Pose pose(jointArray.getArray(), jointArray.size(), defaultPose);
+//    double poseObserve[5] = ARM_POSE_OBSERVE_FAR;
+//    pose.addPose(util::Pose::OBSERVE_FAR, poseObserve);
+//    double poseObserveNear[5] = ARM_POSE_OBSERVE_NEAR;
+//    pose.addPose(util::Pose::OBSERVE_NEAR, poseObserveNear);
+//    double poseTower[5] = ARM_POSE_TOWER;
+//    pose.addPose(util::Pose::TOWER, poseTower);
+//    double poseDrop[5] = ARM_POSE_DROP;
+//    pose.addPose(util::Pose::DROP_AT_PLATE, poseDrop);
 
-    return pose;
-}
+//    return pose;
+//}
 
 brics_actuator::JointPositions Manipulator::extractFirstPointPositions(const trajectory_msgs::JointTrajectory& traj) const {
     // extract joint positions and names
@@ -136,14 +136,14 @@ Manipulator::Manipulator(ros::NodeHandle& node, const Gripper& pGripper, const T
     timeout(ros::Duration(DEFAULT_TIMEOUT)),
     gripper(pGripper),
     trajGenFac(tgFactory),
-    POSE(createPose(ARM_JOINT_NAMES))
+    POSE(util::Pose::createPose(ARM_JOINT_NAMES.getArray(), ARM_JOINT_NAMES.size()))
 {
     armPositionSubscriber = node.subscribe<sensor_msgs::JointState>(jointState_topic, 1, &Manipulator::armPositionHandler, this);
 
     torqueController = new actionlib::SimpleActionClient<torque_control::torque_trajectoryAction>(torqueAction_topic, true);
 
-    ROS_INFO_STREAM("Waiting " << timeout << " seconds for action server to start");
-    torqueController->waitForServer(timeout);
+    ROS_INFO_STREAM("Waiting " << ros::Duration(DEFAULT_TIMEOUT) << " seconds for action server to start");
+    torqueController->waitForServer(ros::Duration(DEFAULT_TIMEOUT));
     if(!torqueController->isServerConnected()) {
         ROS_ERROR("Initialization failed: torque controller is not available");
         exit(1);
@@ -191,7 +191,13 @@ void Manipulator::closeGripper() {
 bool Manipulator::moveArmToPose(util::Pose::POSE_ID poseId) {
 // ############################################################################
 // TODO: test
-    return moveArmToJointPosition(POSE.jointPositions(poseId));
+    brics_actuator::JointPositions positions = POSE.jointPositions(poseId);
+    std::stringstream ss;
+    for(int i=0; i<positions.positions.size(); i++) {
+        ss << positions.positions.at(i) << ", ";
+    }
+    ROS_INFO_STREAM("Next goal position:\n" << ss.str() << "\n");
+    return moveArmToJointPosition(positions);
 // ############################################################################
 }
 

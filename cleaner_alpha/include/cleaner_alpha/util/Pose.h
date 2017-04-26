@@ -27,8 +27,10 @@ private:
     std::map<POSE_ID, double*> poses;
     std::map<POSE_ID, brics_actuator::JointPositions> joint_positions;
 
+    Pose(const std::string* joint_names, size_t n);
+
 public:
-    Pose(const std::string* joint_names, size_t n, double* defaultPose);
+    static const Pose createPose(const std::string* jointNameArray, int size);
 
     void addPose(POSE_ID poseId, double j1, double j2, double j3, double j4, double j5);
 

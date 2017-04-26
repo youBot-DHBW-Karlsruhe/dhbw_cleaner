@@ -48,7 +48,7 @@ class Manipulator {
         Gripper gripper;
         TrajectoryGeneratorFactory trajGenFac;
 
-        static const util::Pose createPose(const ConstArmJointNameArray& jointArray);
+        //static const util::Pose createPose(const ConstArmJointNameArray& jointArray);
 
         brics_actuator::JointPositions extractFirstPointPositions(const trajectory_msgs::JointTrajectory& traj) const;
 

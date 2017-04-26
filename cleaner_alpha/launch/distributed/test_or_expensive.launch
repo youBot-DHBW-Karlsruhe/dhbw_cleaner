@@ -9,5 +9,16 @@
 	<!-- launch find_object node for object detection and dependencies -->
 	<include file="$(find object_recognition)/launch/find_object_3d.launch" />
 
+	<!-- start laser assembler -->
+	<node type="laser_scan_assembler" pkg="laser_assembler" name="laser_assembler">
+		<remap from ="cloud" to="laser" />
+		<param name="max_clouds" type="int" value="200" />
+		<param name="fixed_frame" type="string" value="base_link" />
+	</node>
+
+	<!-- start object finder node -->
+	<param name="debugging" type="bool" value="true" />
+	<node pkg="object_finder_2d" type="object_finder_2d" name="object_finder_2d" output="screen" />
+
 
 </launch>

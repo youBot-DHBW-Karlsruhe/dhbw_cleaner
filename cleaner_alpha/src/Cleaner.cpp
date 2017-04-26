@@ -109,7 +109,7 @@ int main(int argc, char** argv)
     ROS_INFO_STREAM("Next Point: x=" << p.x << ", y=" << p.y);
 
     if(std::abs(p.x) <= tol && std::abs(p.y) <= tol) {
-      ROS_ERROR("Point was nearly (0/0)!!");
+      ROS_ERROR_STREAM("Point was nearly (0/0), tolerance=" << tol << "!!");
       return 1;
     }
     if(p.x < 0) {

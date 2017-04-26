@@ -6,8 +6,8 @@ namespace youbot_proxy {
 // public methods
 ///////////////////////////////////////////////////////////////////////////////
 TrajectoryGeneratorFactory::TrajectoryGeneratorFactory(ros::NodeHandle node) {
-    cs2csGenerator = node.serviceClient<trajectory_generator::CStoCS>("From_CS_to_CS");
-    js2jsGenerator = node.serviceClient<trajectory_generator::JStoJS>("From_JS_to_JS");
+    cs2csGenerator = node.serviceClient<trajectory_generator::CStoCS>("/From_CS_to_CS");
+    js2jsGenerator = node.serviceClient<trajectory_generator::JStoJS>("/From_JS_to_JS");
 }
 
 CSTrajectoryGenerator TrajectoryGeneratorFactory::getCSTrajectoryGenerator(double x, double y, double z, geometry_msgs::Quaternion q) const {

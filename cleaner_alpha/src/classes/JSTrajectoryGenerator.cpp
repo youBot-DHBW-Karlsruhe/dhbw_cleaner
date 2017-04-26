@@ -45,6 +45,10 @@ JSTrajectoryGenerator::JSTrajectoryGenerator(const ros::ServiceClient& js2jsGen,
     max_acc = TrajectoryGenerator::DEFAULT_MAX_ACC;
     max_vel = TrajectoryGenerator::DEFAULT_MAX_VEL;
 
+    if(!js2jsGenerator.isValid()) {
+        ROS_ERROR("JS to JS TrajectoryGenerator not valid!");
+    }
+
     if(checkPositions(startPosition)) {
         ROS_WARN("Empty start position");
     }

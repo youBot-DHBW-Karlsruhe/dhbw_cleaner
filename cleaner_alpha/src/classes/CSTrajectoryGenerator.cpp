@@ -22,6 +22,10 @@ CSTrajectoryGenerator::CSTrajectoryGenerator(const ros::ServiceClient& cs2csGen,
     max_acc = TrajectoryGenerator::DEFAULT_MAX_ACC;
     max_vel = TrajectoryGenerator::DEFAULT_MAX_VEL;
 
+    if(!cs2csGenerator.isValid()) {
+        ROS_ERROR("JS to JS TrajectoryGenerator not valid!");
+    }
+
     resetCS2CS(startPose, 0.0);
 
     keyPointCounter = 1;

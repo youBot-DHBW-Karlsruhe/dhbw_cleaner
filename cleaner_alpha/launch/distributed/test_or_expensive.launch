@@ -6,8 +6,27 @@
 	<!-- Launch needed IK solver -->
 	<node name="ik_solver_service" pkg="ik_solver_service" type="ik_solver_service" output="screen" />
 
-	<!-- launch find_object node for object detection and dependencies -->
-	<include file="$(find object_recognition)/launch/find_object_3d.launch" />
+	<!-- start the camera -->
+	<include file="$(find openni2_launch)/launch/openni2.launch">
+		<arg name = "depth_registration" value = "true"/>
+	</include>
+
+	<!-- launch find_object node for object detection -->
+
+	<node name="find_object_3d" pkg="find_object_2d" type="find_object_2d" output="screen">
+		<param name="gui" value="true" type="bool"/>
+		<param name="settings_path" value="$(find object_recognition)/settings/object_recognition.ini" type="str"/>
+		<param name="subscribe_depth" value="true" type="bool"/>
+		<param name="objects_path" value="$(find object_recognition)/objects/" type="str"/>
+		<param name="object_prefix" value="object" type="str"/>
+		
+		<remap from="rgb/image_rect_color" to="camera/rgb/image_rect_color"/>
+		<remap from="depth_registered/image_raw" to="camera/depth_registered/image_raw"/>
+		<remap from="depth_registered/camera_info" to="camera/depth_registered/camera_info"/>
+	</node>
+	
+	<!-- start our object detection node -->
+	<node name="object_listener" pkg="object_recognition" type="object_recognition" output="screen"/>
 
 	<!-- start laser assembler -->
 	<node type="laser_scan_assembler" pkg="laser_assembler" name="laser_assembler">

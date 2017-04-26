@@ -89,8 +89,8 @@ int main(int argc, char** argv)
 
     // initialize classes
     NearestPointServiceClient nearestPointService(n, "nearest_point");
-    ObjectDetectionListener objectDetection(n, "object_position_aggregated");
-    youbot_proxy::YoubotBase youbot(n, "/cmd_vel", youbot_proxy::YoubotBase::DEFAULT_POINT_SECONDS, youbot_proxy::YoubotBase::DEFAULT_SPEED);
+    ObjectDetectionListener objectDetection(n, "object_position_single");
+    youbot_proxy::YoubotBase youbot(n, "/cmd_vel", youbot_proxy::YoubotBase::DEFAULT_POINT_SECONDS, 0.05);
     youbot_proxy::TrajectoryGeneratorFactory tgFactory(n);
     youbot_proxy::Gripper gripper(n, "/arm_1/gripper_controller/position_command");
     youbot_proxy::Manipulator manipulator(n, gripper, tgFactory, "/joint_states", "/torque_control");
@@ -101,9 +101,9 @@ int main(int argc, char** argv)
     // run this node
     // ------------------------------------------------------------------------
     // assuming that youbot base_link is at (0/0)
-    // target: object at (0/0.4)
+    // target: object at (0/0.38)
     geometry_msgs::Point32 goalPosition;
-    goalPosition.x = 0.4;
+    goalPosition.x = 0.38;
     goalPosition.y = 0;
     geometry_msgs::Point32 p = nearestPointService.nearestPoint();
     double tol = 0.03;
@@ -182,15 +182,20 @@ int main(int argc, char** argv)
       if(manipulator.grabObjectAt(objectPose)) {
           ROS_ERROR("main(): grabbing successful");
 
+          ros::spinOnce();
+          ros::Duration(1.0).sleep();
+
 
           // drop object on plate
           // ------------------------------------------------------------------
-          if(!manipulator.moveArmToPose(youbot_proxy::util::Pose::DROP_AT_PLATE)) {
+          if(!manipulator.dropObject()) {
               ROS_ERROR("Could not move arm to DROP pose!");
               return 1;
           }
-          manipulator.openGripper();
-          ros::Duration(1.5).sleep();
+          if(!manipulator.moveArmToPose(youbot_proxy::util::Pose::OBSERVE_FAR)) {
+              ROS_ERROR("Could not move arm to OBSERVE pose!");
+              return 1;
+          }
           break;
       }
       ROS_ERROR("main(): grabbing failed");

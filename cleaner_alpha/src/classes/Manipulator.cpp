@@ -19,22 +19,6 @@ Manipulator::ConstJointNameArrayFiller Manipulator::armJointArrayFiller = Manipu
 ///////////////////////////////////////////////////////////////////////////////
 // private methods
 ///////////////////////////////////////////////////////////////////////////////
-//const util::Pose Manipulator::createPose(const ConstArmJointNameArray& jointArray){
-//    // create pose object and initialize the poses
-//    double defaultPose[5] = ARM_POSE_INIT;
-//    util::Pose pose(jointArray.getArray(), jointArray.size(), defaultPose);
-//    double poseObserve[5] = ARM_POSE_OBSERVE_FAR;
-//    pose.addPose(util::Pose::OBSERVE_FAR, poseObserve);
-//    double poseObserveNear[5] = ARM_POSE_OBSERVE_NEAR;
-//    pose.addPose(util::Pose::OBSERVE_NEAR, poseObserveNear);
-//    double poseTower[5] = ARM_POSE_TOWER;
-//    pose.addPose(util::Pose::TOWER, poseTower);
-//    double poseDrop[5] = ARM_POSE_DROP;
-//    pose.addPose(util::Pose::DROP_AT_PLATE, poseDrop);
-
-//    return pose;
-//}
-
 brics_actuator::JointPositions Manipulator::extractFirstPointPositions(const trajectory_msgs::JointTrajectory& traj) const {
     // extract joint positions and names
     const trajectory_msgs::JointTrajectoryPoint point = traj.points.back(); // first point of trajectory
@@ -189,16 +173,7 @@ void Manipulator::closeGripper() {
 }
 
 bool Manipulator::moveArmToPose(util::Pose::POSE_ID poseId) {
-// ############################################################################
-// TODO: test
-    brics_actuator::JointPositions positions = POSE.jointPositions(poseId);
-    std::stringstream ss;
-    for(int i=0; i<positions.positions.size(); i++) {
-        ss << positions.positions.at(i) << ", ";
-    }
-    ROS_INFO_STREAM("Next goal position:\n" << ss.str() << "\n");
-    return moveArmToJointPosition(positions);
-// ############################################################################
+    return moveArmToJointPosition(POSE.jointPositions(poseId));
 }
 
 bool Manipulator::moveArmToJointPosition(const brics_actuator::JointPositions& targetPosition) {
@@ -230,7 +205,7 @@ bool Manipulator::moveArmToJointPosition(const brics_actuator::JointPositions& t
 bool Manipulator::grabObjectAt(const geometry_msgs::Pose& pose) {
     // configuration
     double dGrabLine = 0.07;
-    double gripperExt = 0; // TODO: test
+    double gripperExt = -0.02; // TODO: test
     double joint_5_min = 0.1221730476;
     double joint_1_Aty0 = 2.9499152248919236;
 
@@ -256,6 +231,9 @@ bool Manipulator::grabObjectAt(const geometry_msgs::Pose& pose) {
     ///////////////////////////////////////////////////////////////////////////
     // setup phase
     ///////////////////////////////////////////////////////////////////////////
+    trajectory_msgs::JointTrajectory cs2csTraj;
+    trajectory_msgs::JointTrajectory js2jsTraj;
+
     ROS_INFO("Generating linear trajectory (cs2cs)");
     geometry_msgs::Quaternion q = tf::createQuaternionMsgFromRollPitchYaw(0.0, M_PI_2, 0.0);
 
@@ -277,7 +255,6 @@ bool Manipulator::grabObjectAt(const geometry_msgs::Pose& pose) {
 
     // create linear trajectory
     // cs2cs
-    trajectory_msgs::JointTrajectory cs2csTraj;
     youbot_proxy::CSTrajectoryGenerator trajectoryGenCS = this->trajGenFac.getCSTrajectoryGenerator(armStartPosition);
     if(!trajectoryGenCS.addPose(armGoalPosition)) {
         ROS_ERROR("Could not create linear grab trajectory");
@@ -317,7 +294,6 @@ bool Manipulator::grabObjectAt(const geometry_msgs::Pose& pose) {
 
     // create trajectory from current joint position to first position of linear trajectory
     // js2js
-    trajectory_msgs::JointTrajectory js2jsTraj;
     youbot_proxy::JSTrajectoryGenerator trajectoryGenJs = this->trajGenFac.getJSTrajectoryGenerator(currentJointPositions);
     if(!trajectoryGenJs.addPosition(firstJointPositions)) {
         ROS_ERROR("Could not create trajectory to first position");
@@ -352,6 +328,7 @@ bool Manipulator::grabObjectAt(const geometry_msgs::Pose& pose) {
 
     // close gripper
     this->closeGripper();
+    // wait 2 seconds until gripper is closed
     ros::spinOnce();
     ros::Duration(2.0).sleep();
 
@@ -363,12 +340,51 @@ bool Manipulator::grabObjectAt(const geometry_msgs::Pose& pose) {
         return false;
     }
 
-    // move arm to intermediate position
-    ROS_INFO("Moving arm to inermediate position");
-    brics_actuator::JointPositions interPos = currentJointPositions; // in this case it's the init position
-    this->moveArmToJointPosition(interPos);
-
     // finished
+    return true;
+}
+
+bool Manipulator::dropObject() {
+    ///////////////////////////////////////////////////////////////////////////
+    // setup phase
+    ///////////////////////////////////////////////////////////////////////////
+    trajectory_msgs::JointTrajectory js2jsTraj;
+
+    ROS_INFO("Generating trajectory to drop position (js2js)");
+    // extract current joint positions
+    sensor_msgs::JointState jointState = this->getJointStates();
+    brics_actuator::JointPositions currentJointPositions = youbot_proxy::CSTrajectoryGenerator::jointStateToJointPositions(jointState);
+
+    // extract first point
+    brics_actuator::JointPositions dropJointPositions = POSE.jointPositions(util::Pose::DROP_AT_PLATE);
+
+    // create trajectory from current joint position to drop position
+    // js2js
+    youbot_proxy::JSTrajectoryGenerator trajectoryGenJs = this->trajGenFac.getJSTrajectoryGenerator(currentJointPositions);
+    if(!trajectoryGenJs.addPosition(dropJointPositions)) {
+        ROS_ERROR("Could not create trajectory to drop position");
+        return false;
+    }
+    js2jsTraj = trajectoryGenJs.get();
+
+
+    ///////////////////////////////////////////////////////////////////////////
+    // actual movement phase
+    ///////////////////////////////////////////////////////////////////////////
+
+    // move arm to start pose
+    ROS_INFO("Moving arm to drop position (js2js)");
+    if(!this->move(js2jsTraj)) {
+        ROS_ERROR("Could not move arm to drop position. Execution of js2js trajectory failed.");
+        return false;
+    }
+
+    // open gripper
+    this->openGripper();
+    // wait 1.5 seconds until gripper is opened
+    ros::spinOnce();
+    ros::Duration(1.5).sleep();
+
     return true;
 }
 

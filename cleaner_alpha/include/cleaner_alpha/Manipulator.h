@@ -48,8 +48,6 @@ class Manipulator {
         Gripper gripper;
         TrajectoryGeneratorFactory trajGenFac;
 
-        //static const util::Pose createPose(const ConstArmJointNameArray& jointArray);
-
         brics_actuator::JointPositions extractFirstPointPositions(const trajectory_msgs::JointTrajectory& traj) const;
 
         void correctGripperOrientationConst(double angle, trajectory_msgs::JointTrajectory& traj) const;
@@ -89,6 +87,7 @@ class Manipulator {
 
         bool grabObjectAt(const geometry_msgs::Pose& pose);
 
+        bool dropObject();
 
         bool returnToInit();
 };

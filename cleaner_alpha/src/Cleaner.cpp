@@ -127,10 +127,6 @@ int main(int argc, char** argv)
     // ------------------------------------------------------------------------
     double angle, diagMovement;
 
-    ROS_INFO("Enter to start movement");
-    int x;
-    std::cin >> x;
-
     // turn base into direction of the object
     // - -> left
     // + -> right
@@ -147,9 +143,6 @@ int main(int argc, char** argv)
 
     // unfold arm
     // ------------------------------------------------------------------------
-    ROS_INFO("Enter to start unfolding arm");
-    std::cin >> x;
-
     if(!manipulator.moveArmToPose(youbot_proxy::util::Pose::OBSERVE_FAR)) {
       ROS_ERROR("Could not move arm to OBSERVE pose!");
       return 1;
@@ -167,8 +160,6 @@ int main(int argc, char** argv)
       geometry_msgs::Pose objectPose = objectDetection.getObjectPosition();
       ROS_INFO("... received object coordinates");
 
-      ROS_INFO("Enter to start grasping the object");
-      std::cin >> x;
 
       // check orientation values
       double roll, pitch, yaw;
@@ -207,9 +198,6 @@ int main(int argc, char** argv)
 
     // exit cleaner-mode and return youBot to initial pose
     // ------------------------------------------------------------------------
-    ROS_INFO("Enter to return arm to init pose");
-    std::cin >> x;
-
     if(!manipulator.returnToInit()) {
       ROS_ERROR("Could not move arm to INIT pose!");
     }

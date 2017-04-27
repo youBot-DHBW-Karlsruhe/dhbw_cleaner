@@ -38,6 +38,7 @@ class YoubotBase {
         static const double TIMEOUT = 15;
         static const double DEFAULT_POINT_SECONDS = 5.0;
         static const double DEFAULT_SPEED = 0.1;
+        static const double TOLERANCE = 0.01;
 
         // constructor
         YoubotBase(ros::NodeHandle& node, std::string base_vel_topic = "/cmd_vel");

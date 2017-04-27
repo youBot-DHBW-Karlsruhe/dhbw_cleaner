@@ -32,7 +32,10 @@ YoubotBase::~YoubotBase(){}
 void YoubotBase::move(const Direction *direction, double distanceInMeters) {
     geometry_msgs::Twist moveMsg;
 
-    if(speed <= 0) {
+    if(speed <= TOLERANCE/10.0) {
+        return;
+    }
+    if(distanceInMeters <= TOLERANCE) {
         return;
     }
 
@@ -85,7 +88,10 @@ void YoubotBase::move(const Direction *direction, double distanceInMeters) {
 void YoubotBase::move(double x, double y) {
     geometry_msgs::Twist moveMsg;
 
-    if(speed <= 0) {
+    if(speed <= TOLERANCE/10.0) {
+        return;
+    }
+    if(y <= TOLERANCE && x <= TOLERANCE) {
         return;
     }
 
@@ -113,10 +119,10 @@ void YoubotBase::turnDeg(double angleInDeg) {
 void YoubotBase::turnRad(double angleInRad) {
     //double speed = 0.5;
 
-    if(angleInRad == 0) {
+    if(std::abs(angleInRad) <= TOLERANCE) {
         return;
     }
-    if(speed <= 0) {
+    if(speed <= TOLERANCE/10.0) {
         return;
     }
     double duration = (1/speed) * std::abs(angleInRad);

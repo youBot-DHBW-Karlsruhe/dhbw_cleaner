@@ -194,7 +194,7 @@ void ObjectFinder::publishMarker(const geometry_msgs::Point32 point) {
 
 double ObjectFinder::euclDist(const geometry_msgs::Point32 &point) {
     // z is 0
-    return std::sqrt(std::pow(point.x-0.15, 2) + std::pow(point.y, 2));
+    return std::sqrt(std::pow(point.x-0.285, 2) + std::pow(point.y, 2));
 }
 
 }

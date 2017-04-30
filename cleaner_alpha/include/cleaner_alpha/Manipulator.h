@@ -16,6 +16,7 @@
 #include "trajectory_msgs/JointTrajectory.h"
 
 #include "torque_control/torque_trajectoryAction.h"
+#include "control_msgs/FollowJointTrajectoryAction.h"
 
 
 namespace youbot_proxy {
@@ -44,6 +45,7 @@ class Manipulator {
         ros::Publisher gripperPublisher;
         ros::Subscriber armPositionSubscriber;
         actionlib::SimpleActionClient<torque_control::torque_trajectoryAction>* torqueController;
+        actionlib::SimpleActionClient<control_msgs::FollowJointTrajectoryAction>* positionController;
 
         Gripper gripper;
         TrajectoryGeneratorFactory trajGenFac;
@@ -54,7 +56,9 @@ class Manipulator {
 
         std::vector<double> quaternionMsgToRPY(const geometry_msgs::Quaternion q) const;
 
-        bool move(const trajectory_msgs::JointTrajectory& traj );
+        bool move_torque(const trajectory_msgs::JointTrajectory& traj);
+
+        bool move_position(const trajectory_msgs::JointTrajectory& traj);
 
     public:
         // constants
@@ -68,7 +72,9 @@ class Manipulator {
         const util::Pose POSE;
 
         Manipulator(ros::NodeHandle& node, const Gripper& pGripper, const TrajectoryGeneratorFactory& tgFactory,
-                    std::string jointState_topic = "/joint_states", std::string torqueAction_topic = "/torque_control");
+                    std::string jointState_topic = "/joint_states",
+                    std::string torqueAction_topic = "/torque_control",
+                    std::string positionAction_topic = "/arm_1/arm_controller/follow_joint_trajectory");
 
         ~Manipulator();
 

@@ -80,14 +80,14 @@ std::vector<double> Manipulator::quaternionMsgToRPY(const geometry_msgs::Quatern
     return rpy;
 }
 
-bool Manipulator::move(const trajectory_msgs::JointTrajectory& traj ) {
+bool Manipulator::move_torque(const trajectory_msgs::JointTrajectory& traj ) {
     torque_control::torque_trajectoryGoal goal;
 
     // delay execution a bit to allow callbacks
 // TODO: TEST IF REALLY NEEDED ################################################
-    ros::spinOnce();
-    ros::Duration(0.5).sleep();
-    ros::spinOnce();
+    //ros::spinOnce();
+    //ros::Duration(0.5).sleep();
+    //ros::spinOnce();
 // ############################################################################
 
     goal.trajectory = traj;
@@ -104,12 +104,30 @@ bool Manipulator::move(const trajectory_msgs::JointTrajectory& traj ) {
     }
 }
 
+bool Manipulator::move_position(const trajectory_msgs::JointTrajectory& traj ) {
+    control_msgs::FollowJointTrajectoryGoal goal;
+
+    // send goal
+    goal.trajectory = traj;
+    positionController->sendGoal(goal);
+
+    // wait for the action to return
+    bool finishedBeforeTimeout = positionController->waitForResult(ros::Duration(20.0));
+    if (finishedBeforeTimeout) {
+        ROS_INFO("Action finished: %s", positionController->getState().toString().c_str());
+        return true;
+    } else {
+        ROS_INFO("Action did not finish before the time out.");
+        return false;
+    }
+}
+
 
 ///////////////////////////////////////////////////////////////////////////////
 // public methods
 ///////////////////////////////////////////////////////////////////////////////
 Manipulator::Manipulator(ros::NodeHandle& node, const Gripper& pGripper, const TrajectoryGeneratorFactory& tgFactory,
-                         std::string jointState_topic, std::string torqueAction_topic):
+                         std::string jointState_topic, std::string torqueAction_topic, std::string positionAction_topic):
     DEFAULT_TIMEOUT(20),
     I_JOINT_1(0),
     I_JOINT_2(1),
@@ -125,11 +143,18 @@ Manipulator::Manipulator(ros::NodeHandle& node, const Gripper& pGripper, const T
     armPositionSubscriber = node.subscribe<sensor_msgs::JointState>(jointState_topic, 1, &Manipulator::armPositionHandler, this);
 
     torqueController = new actionlib::SimpleActionClient<torque_control::torque_trajectoryAction>(torqueAction_topic, true);
+    positionController = new actionlib::SimpleActionClient<control_msgs::FollowJointTrajectoryAction>(positionAction_topic, true);
 
-    ROS_INFO_STREAM("Waiting " << ros::Duration(DEFAULT_TIMEOUT) << " seconds for action server to start");
-    torqueController->waitForServer(ros::Duration(DEFAULT_TIMEOUT));
+    ROS_INFO_STREAM("Waiting " << ros::Duration(DEFAULT_TIMEOUT) << " seconds for action servers to start");
+    torqueController->waitForServer(ros::Duration(DEFAULT_TIMEOUT*(3/4)));
+    torqueController->waitForServer(ros::Duration(DEFAULT_TIMEOUT*(1/4)));
     if(!torqueController->isServerConnected()) {
         ROS_ERROR("Initialization failed: torque controller is not available");
+        exit(1);
+// throw error instead of shutting down the process ###########################
+    }
+    if(!positionController->isServerConnected()) {
+        ROS_ERROR("Initialization failed: position controller is not available");
         exit(1);
 // throw error instead of shutting down the process ###########################
     }
@@ -137,6 +162,7 @@ Manipulator::Manipulator(ros::NodeHandle& node, const Gripper& pGripper, const T
 
 Manipulator::~Manipulator() {
     delete torqueController;
+    delete positionController;
 }
 
 void Manipulator::armPositionHandler(const sensor_msgs::JointStateConstPtr& msg) {
@@ -195,8 +221,8 @@ bool Manipulator::moveArmToJointPosition(const brics_actuator::JointPositions& t
 
     // move arm
     ROS_INFO("Moving arm to target position (js2js)");
-    if(!this->move(js2jsTraj)) {
-        ROS_ERROR("Could not move arm to target position. Execution of js2js trajectory failed.");
+    if(!this->move_position(js2jsTraj)) {
+        ROS_ERROR("Could not move arm to target position. Execution of js2js trajectory over position action failed.");
         return false;
     }
     return true;
@@ -314,14 +340,14 @@ bool Manipulator::grabObjectAt(const geometry_msgs::Pose& pose) {
 
     // move arm to start pose
     ROS_INFO("Moving arm to first position (js2js)");
-    if(!this->move(js2jsTraj)) {
+    if(!this->move_torque(js2jsTraj)) {
         ROS_ERROR("Could not move arm to start position. Execution of js2js trajectory failed.");
         return false;
     }
 
     // move arm to grab position
     ROS_INFO("Moving arm to grab position (cs2cs)");
-    if(!this->move(cs2csTraj)) {
+    if(!this->move_torque(cs2csTraj)) {
         ROS_ERROR("Could not move arm to grab position. Execution of cs2cs trajectory failed.");
         return false;
     }
@@ -335,7 +361,7 @@ bool Manipulator::grabObjectAt(const geometry_msgs::Pose& pose) {
     // move arm back to start position
     ROS_INFO("Moving arm back to start position (cs2cs)");
     TrajectoryGenerator::reverseTrajectory(cs2csTraj);
-    if(!this->move(cs2csTraj)) {
+    if(!this->move_torque(cs2csTraj)) {
         ROS_ERROR("Could not move arm to start position. Execution of cs2cs trajectory failed.");
         return false;
     }
@@ -374,8 +400,8 @@ bool Manipulator::dropObject() {
 
     // move arm to start pose
     ROS_INFO("Moving arm to drop position (js2js)");
-    if(!this->move(js2jsTraj)) {
-        ROS_ERROR("Could not move arm to drop position. Execution of js2js trajectory failed.");
+    if(!this->move_position(js2jsTraj)) {
+        ROS_ERROR("Could not move arm to drop position. Execution of js2js trajectory over position action failed.");
         return false;
     }
 

@@ -47,13 +47,13 @@ private:
 
 public:
     ObjectDetectionListener(ros::NodeHandle& node, std::string objectPositionTopic = "object_position_single", std::string objectPositionAggregatedTopic = "object_position_aggregated") {
-        objectPositionSingleSubscriber = node.subscribe<object_recognition::ObjectPosition>(objectPositionTopic, 5, &ObjectDetectionListener::objectPosition_single_Callback, this);
-        objectPositionAggregatedSubscriber = node.subscribe<object_recognition::ObjectPosition>(objectPositionTopic, 5, &ObjectDetectionListener::objectPosition_aggregated_Callback, this);
+        objectPositionSingleSubscriber = node.subscribe<object_recognition::ObjectPosition>(objectPositionTopic, 5, &ObjectDetectionListener::objectPosition_single_callback, this);
+        objectPositionAggregatedSubscriber = node.subscribe<object_recognition::ObjectPosition>(objectPositionAggregatedTopic, 5, &ObjectDetectionListener::objectPosition_aggregated_callback, this);
         available = false;
         found = false;
     }
 
-    void objectPosition_single_Callback(const object_recognition::ObjectPositionConstPtr& msg) {
+    void objectPosition_single_callback(const object_recognition::ObjectPositionConstPtr& msg) {
         geometry_msgs::Pose pose;
         pose.position = msg->pose.position;
         pose.orientation = msg->pose.orientation;
@@ -62,7 +62,7 @@ public:
     }
 
 
-    void objectPosition_aggregated_Callback(const object_recognition::ObjectPositionConstPtr& msg) {
+    void objectPosition_aggregated_callback(const object_recognition::ObjectPositionConstPtr& msg) {
         geometry_msgs::Pose pose;
         pose.position = msg->pose.position;
         pose.orientation = msg->pose.orientation;
@@ -84,7 +84,7 @@ public:
         return result;
     }
 
-    bool isAvailable() {
+    bool isAvailable() const {
         ros::spinOnce();
         ros::Duration(0.5).sleep();
         ros::spinOnce();
@@ -92,7 +92,9 @@ public:
     }
 };
 
+
 //----------------------------------- GLOBAL SCOPE ----------------------------
+
 // global Timeout
 const ros::Duration TIMEOUT(30);
 
@@ -112,8 +114,11 @@ void waitForValidNearestPoint(NearestPointServiceClient& service, geometry_msgs:
     ros::Rate loopRate(5);
     *point = service.nearestPoint();
 
-    while(std::abs(point->x) <= tol && std::abs(point->y) <= tol && ros::ok()) {
-        ROS_WARN_STREAM("Point was nearly (0/0), tolerance=" << tol << "!!");
+    while(std::abs(point->x) <= tol &&
+          std::abs(point->y) <= tol &&
+          point->x < 0 &&
+          ros::ok()) {
+        ROS_WARN_STREAM("Point was nearly (0/0) or negative in x-achsis, tolerance=" << tol << "!!");
         ros::spinOnce();
         loopRate.sleep();
         *point = service.nearestPoint();
@@ -124,25 +129,65 @@ void waitForValidNearestPoint(NearestPointServiceClient& service, geometry_msgs:
     }
 }
 
+void moveToObjectAt(youbot_proxy::YoubotBase& youbot, const geometry_msgs::Point32& p, const geometry_msgs::Point32& goalPosition) {
+    double angle, diagMovement;
+
+    // turn base into direction of the object
+    // - -> left
+    // + -> right
+    angle = std::atan2(p.y, p.x);
+    youbot.turnRad(angle);
+
+    // move base straight forward towards the object
+    diagMovement = std::sqrt(std::pow(p.x, 2) + std::pow(p.y, 2)) - goalPosition.x;
+    youbot.move(diagMovement, goalPosition.y);
+}
+
+bool detectObject(ObjectDetectionListener& objectDetection, ros::Duration maxDetectionDuration, geometry_msgs::Pose* objectPose) {
+    ros::Time startWaiting;
+
+
+    ROS_INFO("Waiting for object detection...");
+    startWaiting = ros::Time::now();
+    while(!objectDetection.foundObject() && ros::ok()) {
+        if(timedOut(startWaiting, maxDetectionDuration)) {
+            ROS_WARN("... no grabbable object found!");
+            return false;
+        }
+    }
+
+    while(!objectDetection.isAvailable() && ros::ok()) {
+        if(timedOut(startWaiting, maxDetectionDuration)) {
+            ROS_WARN("... found object, but could not retrieve aggregated position data");
+            return false;
+        }
+    }
+    *objectPose = objectDetection.getObjectPosition();
+    ROS_INFO("... received object coordinates");
+    return true;
+}
+
 bool checkSelfcollision(const geometry_msgs::Pose& objectPose) {
-    int x = objectPose.position.x;
-    int y = objectPose.position.y;
+    double x = objectPose.position.x;
+    double y = objectPose.position.y;
     // relative to frame arm_link_0
-    int baseWidth = 0.39;
-    int baseLength = 0.570;
-    int timWidth = 0.07;
-    int timLength = 0.08;
-    int arm0_x = 0.135;
-    int arm0_y = 0;
+    double baseWidth = 0.39;
+    double baseLength = 0.570;
+    double timWidth = 0.07;
+    double timLength = 0.08;
+    double arm0_x = 0.135;
+    double arm0_y = 0;
 
     // sick tim collision
-    if(x < baseLength/2.0 + timLength - arm0_x && x >= baseLength/2.0 - arm0_x &&
+    if(x < baseLength/2.0 + timLength - arm0_x &&
+       x >= baseLength/2.0 - arm0_x &&
        std::abs(y) <= timWidth) {
         return true;
     }
 
     // base front
-    if(x < baseLength/2.0 - arm0_x && x > baseLength/2.0 + arm0_x &&
+    if(x < baseLength/2.0 - arm0_x &&
+       x > baseLength/2.0 + arm0_x &&
        std::abs(y) <= baseWidth/2.) {
         return true;
     }
@@ -151,28 +196,42 @@ bool checkSelfcollision(const geometry_msgs::Pose& objectPose) {
 }
 
 bool checkInRange(const geometry_msgs::Pose& objectPose) {
-    int x = objectPose.position.x;
-    int y = objectPose.position.y;
+    double x = objectPose.position.x;
+    double y = objectPose.position.y;
     // relative to frame arm_link_0
 
-    if(0.32 <= std::sqrt(x*x + y*y)) {
-        return false;
-    }
-    return true;
+    return 0.32 <= std::sqrt(x*x + y*y);
 }
 
-geometry_msgs::Quaternion normalizeOrientation(const geometry_msgs::Pose& objectPose) {
+bool checkIfPointIsNear(const geometry_msgs::Point32& point) {
+    double x = point.x - 0.135; // distance from arm_link_0
+    double y = point.y;
+
+    return x < 0.32 && x > 0.23
+            && std::abs(y) <=20;
+}
+
+geometry_msgs::Point32 calcPositionCorrection(const geometry_msgs::Point32& object) {
+    geometry_msgs::Point32 movement;
+    movement.x = 0;
+    movement.y = (object.y > 0)? -0.02 : 0.02;
+
+    // angular movement needed?
+    return movement;
+}
+
+geometry_msgs::Quaternion normalizeOrientation(geometry_msgs::Pose* objectPose) {
     double roll, pitch, yaw;
     tf::Quaternion quat;
-    tf::quaternionMsgToTF(objectPose.orientation, quat);
+    tf::quaternionMsgToTF(objectPose->orientation, quat);
     tf::Matrix3x3(quat).getRPY(roll, pitch, yaw);
-    ROS_INFO_STREAM("Object Position:\n x=" << objectPose.position.x << ", y=" << objectPose.position.y << ", z=" << objectPose.position.z);
+    ROS_INFO_STREAM("Object Position:\n x=" << objectPose->position.x << ", y=" << objectPose->position.y << ", z=" << objectPose->position.z);
     ROS_INFO_STREAM("Object Orientation:\n Roll=" << roll << ", Pitch=" << pitch << ", Yaw=" << yaw);
 
     pitch = 0;
     yaw = 0;
     geometry_msgs::Quaternion q = tf::createQuaternionMsgFromRollPitchYaw(roll, pitch, yaw);
-    return q;
+    objectPose->orientation = q;
 }
 
 
@@ -192,119 +251,234 @@ int main(int argc, char** argv)
     youbot_proxy::YoubotBase youbot(n, "/cmd_vel", youbot_proxy::YoubotBase::DEFAULT_POINT_SECONDS, 0.1);
     youbot_proxy::TrajectoryGeneratorFactory tgFactory(n);
     youbot_proxy::Gripper gripper(n, "/arm_1/gripper_controller/position_command");
-    youbot_proxy::Manipulator manipulator(n, gripper, tgFactory, "/joint_states", "/torque_control");
+    youbot_proxy::Manipulator manipulator(n, gripper, tgFactory, "/joint_states", "/torque_control", "/arm_1/arm_controller/follow_joint_trajectory");
+
+    // init variables
+    enum State {
+        FIND_NEXT_OBJECT, DRIVE_TO_OBJECT, DETECT_OBJECT, TRY_GRASP, CORRECT_POSITION, FINISHED, ERROR
+    };
+
+    int nObjects = 2;
+    geometry_msgs::Point32 goalPosition;                    // assuming that youbot base_link is at (0/0),
+    goalPosition.x = 0.39;                                  // then target: object at (0/0.39)
+    goalPosition.y = 0;
+    geometry_msgs::Point32 p;
+    ros::Duration maxDetectionDuration(20, 0);              // waiting time until object detection will cancel
+    geometry_msgs::Pose objectPose;
+    State state = FIND_NEXT_OBJECT;
+    int correctionAttempts = 0;
 
     ROS_INFO("----- youbot proxy and cleaner running");
     ROS_INFO("--------------------------------------");
 
-    // run this node
+
+    // run this node: main routine
     // ------------------------------------------------------------------------
-    // assuming that youbot base_link is at (0/0)
-    // target: object at (0/0.38)
-    geometry_msgs::Point32 goalPosition;
-    goalPosition.x = 0.39;
-    goalPosition.y = 0;
-    geometry_msgs::Point32 p;
-    // waiting time until object detection will cancel
-    ros::Duration maxDetectionDuration(20, 0);
+    while(state != FINISHED && ros::ok()) {
+        switch(state) {
+        case FIND_NEXT_OBJECT:
+            // find nearest point (--> object)
+            waitForValidNearestPoint(nearestPointService, &p);
+            ROS_INFO_STREAM("Next Point: x=" << p.x << ", y=" << p.y);
 
-    // print point coordinates
-    waitForValidNearestPoint(nearestPointService, &p);
-    ROS_INFO_STREAM("Next Point: x=" << p.x << ", y=" << p.y);
+            state = DRIVE_TO_OBJECT;
+            break;
 
-    if(p.x < 0) {
-      ROS_ERROR("Object is behind the youBot?!");
-      // should not be possible
-      // in this case to following algorithm will not work
-      return 1;
-    }
+        case DRIVE_TO_OBJECT:
+            // arm to move pose?
+            //TODO
 
+            // move base to the nearest object
+            moveToObjectAt(youbot, p, goalPosition);
 
-    // move base to the nearest object
-    // ------------------------------------------------------------------------
-    double angle, diagMovement;
+            state = DETECT_OBJECT;
+            break;
 
-    // turn base into direction of the object
-    // - -> left
-    // + -> right
-    angle = std::atan2(p.y, p.x);
-    youbot.turnRad(angle);
-    // move base straight forward towards the object
-    diagMovement = std::sqrt(std::pow(p.x, 2) + std::pow(p.y, 2)) - goalPosition.x;
-    youbot.move(diagMovement, goalPosition.y);
+        case DETECT_OBJECT:
+            // unfold arm
+            if(!manipulator.moveArmToPose(youbot_proxy::util::Pose::OBSERVE_FAR)) {
+                ROS_ERROR("Could not move arm to OBSERVE pose!");
+                return 1;
+            }
 
-    // check position
-    p = nearestPointService.nearestPoint();
-    ROS_INFO_STREAM("Nearest Point after movement: x=" << p.x << ", y=" << p.y);
+            // retrieve object position
+            if(detectObject(objectDetection, maxDetectionDuration, &objectPose)) {
+                state = TRY_GRASP;
+            } else {
+                state = CORRECT_POSITION;
+            }
+            break;
 
+        case CORRECT_POSITION:
+            // get position of nearest point
+            waitForValidNearestPoint(nearestPointService, &p);
 
-    // unfold arm
-    // ------------------------------------------------------------------------
-    if(!manipulator.moveArmToPose(youbot_proxy::util::Pose::OBSERVE_FAR)) {
-      ROS_ERROR("Could not move arm to OBSERVE pose!");
-      return 1;
-    }
-    manipulator.openGripper();
+            // inside bounds?
+            if(checkIfPointIsNear(p) && correctionAttempts < 3) {
+                // correct position
+                geometry_msgs::Point32 movement = calcPositionCorrection(p);
+                youbot.move(movement.x, movement.y);
+                correctionAttempts++;
 
+                state = DETECT_OBJECT;
+            } else {
+                correctionAttempts = 0;
+                state = DRIVE_TO_OBJECT;
+            }
+            break;
 
-    // observe object position and orientation in preparation for grasping
-    // and grab object
-    // ------------------------------------------------------------------------
-    while(ros::ok()) {
-      // retrieve object position
-      ROS_INFO("Waiting for object detection...");
-      ros::Time startWaiting = ros::Time::now();
-      while(!objectDetection.foundObject() && ros::ok()) {
-          if(timedOut(startWaiting, maxDetectionDuration)) {
-              ROS_WARN("No grabbable object found!");
-              terminate_timeout("no logic implemented for this case");
-          }
-      }
-      while(!objectDetection.isAvailable() && ros::ok()) {};
-      geometry_msgs::Pose objectPose = objectDetection.getObjectPosition();
-      ROS_INFO("... received object coordinates");
+        case TRY_GRASP:
+            // check position values
+            normalizeOrientation(&objectPose);
+            if(checkSelfcollision(objectPose)) {
+                ROS_WARN("Grab position would selfcollide");
+                // calc correction and back to detectObject-loop
+                state = DETECT_OBJECT;
+                break;
+            }
+            if(!checkInRange(objectPose)) {
+                ROS_WARN("Grab position outside of gripper range");
+                // calc correction and back to detectObject-loop
+                state = DETECT_OBJECT;
+                break;
+            }
 
+            // grab object
+            if(!manipulator.grabObjectAt(objectPose)) {
+                ROS_ERROR("Grabbing failed!");
+                return 1;
+            }
 
-      // check orientation values
-      objectPose.orientation = normalizeOrientation(objectPose);
+            // drop object on plate
+            if(!manipulator.dropObject()) {
+                ROS_ERROR("Could not move arm to DROP pose!");
+                return 1;
+            }
 
-      // check position values
-      if(checkSelfcollision(objectPose)) {
-          ROS_WARN("Grab position would selfcollide");
-          return 1;
-      }
-      if(!checkInRange(objectPose)) {
-          ROS_WARN("Grab position outside of gripper range");
-          return 1;
-      }
+            // check if we really grabbed the object
+            if(!manipulator.moveArmToPose(youbot_proxy::util::Pose::OBSERVE_FAR)) {
+                ROS_ERROR("Could not move arm to OBSERVE pose!");
+                return 1;
+            }
+            if(detectObject(objectDetection, maxDetectionDuration, &objectPose)) {
+                // there is still an object --> grabbing was not successful
+                ROS_WARN("There is still an object in front of the youbot. Retrying grabbing!");
 
-      if(manipulator.grabObjectAt(objectPose)) {
-          ROS_ERROR("main(): grabbing successful");
+                // try again
+                state = TRY_GRASP;
+                break;
+            }
 
-          ros::spinOnce();
-          ros::Duration(1.0).sleep();
+            // successfull
+            nObjects--;
+            if(nObjects > 0) {
+                state = FIND_NEXT_OBJECT;
+            } else {
+                state = FINISHED;
+            }
+            break;
 
-
-          // drop object on plate
-          // ------------------------------------------------------------------
-          if(!manipulator.dropObject()) {
-              ROS_ERROR("Could not move arm to DROP pose!");
-              return 1;
-          }
-          if(!manipulator.moveArmToPose(youbot_proxy::util::Pose::OBSERVE_FAR)) {
-              ROS_ERROR("Could not move arm to OBSERVE pose!");
-              return 1;
-          }
-          break;
-      }
-      ROS_ERROR("main(): grabbing failed");
+        case ERROR:
+        default:
+            ROS_ERROR("");
+            state = FINISHED;
+        }
     }
 
     // exit cleaner-mode and return youBot to initial pose
-    // ------------------------------------------------------------------------
     if(!manipulator.returnToInit()) {
       ROS_ERROR("Could not move arm to INIT pose!");
     }
+
+    // deinit
+    ros::shutdown();
     return 0;
 
+    /*
+    while(nObjects > 0 && ros::ok()) {
+        // arm to move pose?
+        //TODO
+
+        // find nearest point (--> object)
+        waitForValidNearestPoint(nearestPointService, &p);
+        ROS_INFO_STREAM("Next Point: x=" << p.x << ", y=" << p.y);
+
+        // move base to the nearest object
+        moveToObjectAt(youbot, p, goalPosition);
+
+        // unfold arm
+        if(!manipulator.moveArmToPose(youbot_proxy::util::Pose::OBSERVE_FAR)) {
+            ROS_ERROR("Could not move arm to OBSERVE pose!");
+            return 1;
+        }
+
+
+        // observe object position and orientation in preparation for grasping
+        // and grab object
+        // ------------------------------------------------------------------------
+        // retrieve object position
+        int repetitions = 0;
+        objectPose = geometry_msgs::Pose();
+        while(!detectObject(objectDetection, maxDetectionDuration, &objectPose)) {
+            // next point
+            // near the scanner and reps < 3?
+            // ...
+            if(repetitions < 3) {
+                ROS_ERROR("");
+                return 1;
+            }
+        }
+
+        // check orientation values
+        normalizeOrientation(&objectPose);
+
+        // check position values
+        if(checkSelfcollision(objectPose)) {
+            ROS_WARN("Grab position would selfcollide");
+            // calc correction and back to detectObject-loop
+            return 1;
+        }
+        if(!checkInRange(objectPose)) {
+            ROS_WARN("Grab position outside of gripper range");
+            // calc correction and back to detectObject-loop
+            return 1;
+        }
+
+        // grab object
+        if(!manipulator.grabObjectAt(objectPose)) {
+            ROS_ERROR("Grabbing failed!");
+            return 1;
+        }
+
+        // drop object on plate
+        if(!manipulator.dropObject()) {
+            ROS_ERROR("Could not move arm to DROP pose!");
+            return 1;
+        }
+
+        // check if we really grabbed the object
+        if(!manipulator.moveArmToPose(youbot_proxy::util::Pose::OBSERVE_FAR)) {
+            ROS_ERROR("Could not move arm to OBSERVE pose!");
+            return 1;
+        }
+        if(detectObject(objectDetection, maxDetectionDuration, &objectPose)) {
+            // there is still an object --> grabbing was not successful
+            // back to checkSelfcollision()
+            ROS_WARN("There is still an object in front of the youbot. Retrying grabbing!");
+            return 1;
+        }
+
+        nObjects--;
+    }
+
+
+    // exit cleaner-mode and return youBot to initial pose
+    if(!manipulator.returnToInit()) {
+      ROS_ERROR("Could not move arm to INIT pose!");
+    }
+
+    // deinit
+    ros::shutdown();
+    return 0;
+    */
 }

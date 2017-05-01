@@ -407,9 +407,9 @@ bool Manipulator::dropObject() {
 
     // open gripper
     this->openGripper();
-    // wait 1.5 seconds until gripper is opened
+    // wait 2 seconds until gripper is opened
     ros::spinOnce();
-    ros::Duration(1.5).sleep();
+    ros::Duration(2).sleep();
 
     return true;
 }

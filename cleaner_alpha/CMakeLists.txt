@@ -162,6 +162,7 @@ target_link_libraries(cleaner		manipulator
 add_executable(cleaner2			src/Cleaner2.cpp)
 add_dependencies(cleaner2		${catkin_EXPORTED_TARGETS})
 target_link_libraries(cleaner2		manipulator
+					youbot_base
 					${catkin_LIBRARIES})
 
 

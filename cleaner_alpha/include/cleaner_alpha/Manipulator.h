@@ -58,7 +58,7 @@ class Manipulator {
 
         bool move_torque(const trajectory_msgs::JointTrajectory& traj);
 
-        bool move_position(const trajectory_msgs::JointTrajectory& traj);
+        bool move_position(const brics_actuator::JointPositions& targetPosition);
 
     public:
         // constants

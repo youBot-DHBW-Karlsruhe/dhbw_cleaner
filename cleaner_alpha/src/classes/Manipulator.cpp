@@ -104,11 +104,26 @@ bool Manipulator::move_torque(const trajectory_msgs::JointTrajectory& traj ) {
     }
 }
 
-bool Manipulator::move_position(const trajectory_msgs::JointTrajectory& traj ) {
+bool Manipulator::move_position(const brics_actuator::JointPositions& targetPosition) {
     control_msgs::FollowJointTrajectoryGoal goal;
+    trajectory_msgs::JointTrajectory trajectory;
+
+    trajectory.joint_names = std::vector<std::string>(ARM_JOINT_NAMES.getArray(), ARM_JOINT_NAMES.getArray() + ARM_JOINT_NAMES.size());
+    trajectory_msgs::JointTrajectoryPoint lastPoint;
+    for(int i=0; i<targetPosition.positions.size(); i++) {
+        lastPoint.accelerations.push_back(0);
+        lastPoint.velocities.push_back(0);
+        lastPoint.positions.push_back(targetPosition.positions[i].value);
+    }
+    lastPoint.time_from_start = ros::Duration(5);
+    trajectory.points.push_back(lastPoint);
+
+    trajectory.header.seq = 0;
+    trajectory.header.frame_id = "arm_link_0";
+    trajectory.header.stamp = ros::Time::now();
+    goal.trajectory = trajectory;
 
     // send goal
-    goal.trajectory = traj;
     positionController->sendGoal(goal);
 
     // wait for the action to return
@@ -147,7 +162,7 @@ Manipulator::Manipulator(ros::NodeHandle& node, const Gripper& pGripper, const T
 
     ROS_INFO_STREAM("Waiting " << ros::Duration(DEFAULT_TIMEOUT) << " seconds for action servers to start");
     torqueController->waitForServer(ros::Duration(DEFAULT_TIMEOUT*(3/4)));
-    torqueController->waitForServer(ros::Duration(DEFAULT_TIMEOUT*(1/4)));
+    positionController->waitForServer(ros::Duration(DEFAULT_TIMEOUT*(1/4)));
     if(!torqueController->isServerConnected()) {
         ROS_ERROR("Initialization failed: torque controller is not available");
         exit(1);
@@ -203,6 +218,7 @@ bool Manipulator::moveArmToPose(util::Pose::POSE_ID poseId) {
 }
 
 bool Manipulator::moveArmToJointPosition(const brics_actuator::JointPositions& targetPosition) {
+    /*
     ROS_INFO("Generating trajectory to joint position (js2js)");
 
     // extract current joint positions
@@ -219,9 +235,10 @@ bool Manipulator::moveArmToJointPosition(const brics_actuator::JointPositions& t
     }
     js2jsTraj = trajectoryGenJs.get();
 
+    */
     // move arm
     ROS_INFO("Moving arm to target position (js2js)");
-    if(!this->move_position(js2jsTraj)) {
+    if(!this->move_position(targetPosition)) {
         ROS_ERROR("Could not move arm to target position. Execution of js2js trajectory over position action failed.");
         return false;
     }
@@ -371,36 +388,9 @@ bool Manipulator::grabObjectAt(const geometry_msgs::Pose& pose) {
 }
 
 bool Manipulator::dropObject() {
-    ///////////////////////////////////////////////////////////////////////////
-    // setup phase
-    ///////////////////////////////////////////////////////////////////////////
-    trajectory_msgs::JointTrajectory js2jsTraj;
-
-    ROS_INFO("Generating trajectory to drop position (js2js)");
-    // extract current joint positions
-    sensor_msgs::JointState jointState = this->getJointStates();
-    brics_actuator::JointPositions currentJointPositions = youbot_proxy::CSTrajectoryGenerator::jointStateToJointPositions(jointState);
-
-    // extract first point
-    brics_actuator::JointPositions dropJointPositions = POSE.jointPositions(util::Pose::DROP_AT_PLATE);
-
-    // create trajectory from current joint position to drop position
-    // js2js
-    youbot_proxy::JSTrajectoryGenerator trajectoryGenJs = this->trajGenFac.getJSTrajectoryGenerator(currentJointPositions);
-    if(!trajectoryGenJs.addPosition(dropJointPositions)) {
-        ROS_ERROR("Could not create trajectory to drop position");
-        return false;
-    }
-    js2jsTraj = trajectoryGenJs.get();
-
-
-    ///////////////////////////////////////////////////////////////////////////
-    // actual movement phase
-    ///////////////////////////////////////////////////////////////////////////
-
-    // move arm to start pose
+    // move arm to drop pose
     ROS_INFO("Moving arm to drop position (js2js)");
-    if(!this->move_position(js2jsTraj)) {
+    if(!this->move_position(POSE.jointPositions(util::Pose::DROP_AT_PLATE))) {
         ROS_ERROR("Could not move arm to drop position. Execution of js2js trajectory over position action failed.");
         return false;
     }

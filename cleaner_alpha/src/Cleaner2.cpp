@@ -211,18 +211,19 @@ private:
         return movement;
     }
 
-    static geometry_msgs::Quaternion normalizeOrientation(geometry_msgs::Pose* objectPose) {
+    geometry_msgs::Quaternion normalizeOrientation() {
         double roll, pitch, yaw;
         tf::Quaternion quat;
-        tf::quaternionMsgToTF(objectPose->orientation, quat);
+        tf::quaternionMsgToTF(objectPose.orientation, quat);
         tf::Matrix3x3(quat).getRPY(roll, pitch, yaw);
-        ROS_INFO_STREAM("Object Position:\n x=" << objectPose->position.x << ", y=" << objectPose->position.y << ", z=" << objectPose->position.z);
+        ROS_INFO_STREAM("Object Position:\n x=" << objectPose.position.x << ", y=" << objectPose.position.y << ", z=" << objectPose.position.z);
         ROS_INFO_STREAM("Object Orientation:\n Roll=" << roll << ", Pitch=" << pitch << ", Yaw=" << yaw);
 
         pitch = 0;
         yaw = 0;
         geometry_msgs::Quaternion q = tf::createQuaternionMsgFromRollPitchYaw(roll, pitch, yaw);
-        objectPose->orientation = q;
+        objectPose.orientation = q;
+        ROS_INFO("Normalized object orientation");
     }
 
 
@@ -258,7 +259,7 @@ private:
         // unfold arm
         if(!manipulator.moveArmToPose(youbot_proxy::util::Pose::OBSERVE_FAR)) {
             ROS_ERROR("Could not move arm to OBSERVE pose!");
-            return 1;
+            throw ExecutionException("Arm movement failed.");
         }
 
         // retrieve object position
@@ -305,17 +306,20 @@ private:
 
     Grasp_Result tryGrasp() {
         // check position values
-        normalizeOrientation(&objectPose);
+        normalizeOrientation();
+        ROS_INFO("Checking for self collision");
         if(checkSelfcollision(objectPose)) {
             ROS_WARN("Grab position would selfcollide");
             return OBJECT_NOT_REACHABLE;
         }
+        ROS_INFO("Checking for gripper range");
         if(!checkInRange(objectPose)) {
             ROS_WARN("Grab position outside of gripper range");
             return OBJECT_NOT_REACHABLE;
         }
 
         // grab object
+        ROS_INFO("Trying to grab object...");
         if(!manipulator.grabObjectAt(objectPose)) {
             throw ExecutionException("Grabbing failed!");
         }

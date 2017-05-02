@@ -58,7 +58,7 @@ class Manipulator {
 
         bool move_torque(const trajectory_msgs::JointTrajectory& traj);
 
-        bool move_position(const brics_actuator::JointPositions& targetPosition);
+        bool move_position(const brics_actuator::JointPositions& targetPosition, double duration);
 
     public:
         // constants
@@ -90,6 +90,7 @@ class Manipulator {
 
         bool moveArmToJointPosition(const brics_actuator::JointPositions& targetPosition);
 
+        bool returnToObservePosition();
 
         bool grabObjectAt(const geometry_msgs::Pose& pose);
 

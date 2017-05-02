@@ -98,7 +98,7 @@ private:
     // private classes
     ///////////////////////////////////////////////////////////////////////////////
     enum State {
-        FIND_NEXT_OBJECT, DRIVE_TO_OBJECT, DETECT_OBJECT, TRY_GRASP, CORRECT_POSITION, CORRECT_GRASP_POSITION, FINISHED, ERROR
+        FIND_NEXT_OBJECT, DRIVE_TO_OBJECT, OBSERVE_POSE, DETECT_OBJECT, TRY_GRASP, CORRECT_POSITION, CORRECT_GRASP_POSITION, FINISHED, ERROR
     };
 
     enum Grasp_Result {
@@ -166,6 +166,8 @@ private:
         double arm0_y = 0;
 
         // sick tim collision
+        // x < 0.23 && x >= 0.15
+        // -0.07 < y < 0.07
         if(x < baseLength/2.0 + timLength - arm0_x &&
            x >= baseLength/2.0 - arm0_x &&
            std::abs(y) <= timWidth) {
@@ -173,8 +175,10 @@ private:
         }
 
         // base front
+        // x < 0.15 && x > -0.42
+        // -0.195 < y < 0.195
         if(x < baseLength/2.0 - arm0_x &&
-           x > baseLength/2.0 + arm0_x &&
+           x > -(baseLength/2.0 + arm0_x) &&
            std::abs(y) <= baseWidth/2.) {
             return true;
         }
@@ -187,7 +191,7 @@ private:
         double y = objectPose.position.y;
         // relative to frame arm_link_0
 
-        return 0.32 <= std::sqrt(x*x + y*y);
+        return std::sqrt(std::pow(x, 2) + std::pow(y, 2)) <= 0.32;
     }
 
     static bool checkIfPointIsNear(const geometry_msgs::Point32& point) {
@@ -205,7 +209,7 @@ private:
     static geometry_msgs::Point32 calcPositionCorrection(const geometry_msgs::Point32& object) {
         geometry_msgs::Point32 movement;
         movement.x = 0;
-        movement.y = (object.y > 0)? -0.02 : 0.02;
+        movement.y = (object.y > 0)? 0.03 : -0.03;
 
         // angular movement needed?
         return movement;
@@ -251,16 +255,20 @@ private:
         // move base straight forward towards the object
         diagMovement = std::sqrt(std::pow(p.x, 2) + std::pow(p.y, 2)) - GOAL_POSITION.x;
         youbot.move(diagMovement, GOAL_POSITION.y);
-    }
-
-    bool detectObject() {
-        ros::Time startWaiting;
 
         // unfold arm
         if(!manipulator.moveArmToPose(youbot_proxy::util::Pose::OBSERVE_FAR)) {
             ROS_ERROR("Could not move arm to OBSERVE pose!");
             throw ExecutionException("Arm movement failed.");
         }
+    }
+
+    bool detectObject() {
+        ros::Time startWaiting;
+
+        ros::Duration(3).sleep();
+        ros::spinOnce();
+        ros::Duration(3).sleep();
 
         // retrieve object position
         ROS_INFO("Waiting for object detection...");
@@ -329,6 +337,12 @@ private:
             throw ExecutionException("Could not move arm to DROP pose!");
         }
 
+        // move arm to observe position
+        if(!manipulator.returnToObservePosition()) {
+            ROS_ERROR("Could not move arm to OBSERVE pose!");
+            throw ExecutionException("Arm movement failed.");
+        }
+
         // check if we really grabbed the object
         if(detectObject()) {
             ROS_WARN("There is still an object in front of the youbot. Retrying grabbing!");
@@ -349,10 +363,12 @@ private:
 
         // calc correction and back to detectObject-loop
         if(outsideRange) {
-            angle = std::atan2(x, y);
-            youbot.turnRad(angle);
+            // TODO: adapt
+            //angle = std::atan2(x, y);
+            //youbot.turnRad(angle);
 
-            dx = std::sqrt(x*x + y*y - 0.32*0.32) - 0.04;
+            //dx = std::sqrt(x*x + y*y - 0.32*0.32) - 0.04;
+            dx = 0.04;
             youbot.move(dx, dy);
 
         } else if(selfCollision) {

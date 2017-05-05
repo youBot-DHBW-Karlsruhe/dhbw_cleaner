@@ -138,12 +138,22 @@ bool Manipulator::move_position(const brics_actuator::JointPositions& targetPosi
     }
 }
 
+bool Manipulator::move_brics(const brics_actuator::JointPositions& targetPosition) {
+    armPublisher.publish(targetPosition);
+    ros::spinOnce();
+    ros::Duration(0.5).sleep();
+    armPublisher.publish(targetPosition);
+    ros::spinOnce();
+    ros::Duration(3).sleep();
+    return true;
+}
+
 
 ///////////////////////////////////////////////////////////////////////////////
 // public methods
 ///////////////////////////////////////////////////////////////////////////////
 Manipulator::Manipulator(ros::NodeHandle& node, const Gripper& pGripper, const TrajectoryGeneratorFactory& tgFactory,
-                         std::string jointState_topic, std::string torqueAction_topic, std::string positionAction_topic):
+                         std::string jointState_topic, std::string torqueAction_topic, std::string positionAction_topic, std::string arm_topic):
     DEFAULT_TIMEOUT(20),
     I_JOINT_1(0),
     I_JOINT_2(1),
@@ -156,6 +166,7 @@ Manipulator::Manipulator(ros::NodeHandle& node, const Gripper& pGripper, const T
     trajGenFac(tgFactory),
     POSE(util::Pose::createPose(ARM_JOINT_NAMES.getArray(), ARM_JOINT_NAMES.size()))
 {
+    armPublisher = node.advertise<brics_actuator::JointPositions>(arm_topic, 1);
     armPositionSubscriber = node.subscribe<sensor_msgs::JointState>(jointState_topic, 1, &Manipulator::armPositionHandler, this);
 
     torqueController = new actionlib::SimpleActionClient<torque_control::torque_trajectoryAction>(torqueAction_topic, true);
@@ -229,6 +240,7 @@ bool Manipulator::moveArmToJointPosition(const brics_actuator::JointPositions& t
 }
 
 bool Manipulator::returnToObservePosition() {
+    /*
     brics_actuator::JointPositions intermidiate = POSE.jointPositions(POSE.TOWER);
 
     ros::Duration(0.5).sleep();
@@ -252,6 +264,8 @@ bool Manipulator::returnToObservePosition() {
     }
 
     return true;
+    */
+    return move_brics(POSE.jointPositions(POSE.OBSERVE_FAR));
 }
 
 bool Manipulator::grabObjectAt(const geometry_msgs::Pose& pose) {

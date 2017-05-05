@@ -209,25 +209,10 @@ private:
     static geometry_msgs::Point32 calcPositionCorrection(const geometry_msgs::Point32& object) {
         geometry_msgs::Point32 movement;
         movement.x = 0;
-        movement.y = (object.y > 0)? 0.03 : -0.03;
+        movement.y = (object.y > 0)? 0.04 : -0.04;
 
         // angular movement needed?
         return movement;
-    }
-
-    geometry_msgs::Quaternion normalizeOrientation() {
-        double roll, pitch, yaw;
-        tf::Quaternion quat;
-        tf::quaternionMsgToTF(objectPose.orientation, quat);
-        tf::Matrix3x3(quat).getRPY(roll, pitch, yaw);
-        ROS_INFO_STREAM("Object Position:\n x=" << objectPose.position.x << ", y=" << objectPose.position.y << ", z=" << objectPose.position.z);
-        ROS_INFO_STREAM("Object Orientation:\n Roll=" << roll << ", Pitch=" << pitch << ", Yaw=" << yaw);
-
-        pitch = 0;
-        yaw = 0;
-        geometry_msgs::Quaternion q = tf::createQuaternionMsgFromRollPitchYaw(roll, pitch, yaw);
-        objectPose.orientation = q;
-        ROS_INFO("Normalized object orientation");
     }
 
 
@@ -265,10 +250,6 @@ private:
 
     bool detectObject() {
         ros::Time startWaiting;
-
-        ros::Duration(3).sleep();
-        ros::spinOnce();
-        ros::Duration(3).sleep();
 
         // retrieve object position
         ROS_INFO("Waiting for object detection...");
@@ -310,11 +291,13 @@ private:
             correctionAttempts = 0;
             return false;
         }
+        ROS_INFO("Correction attempts = %d", correctionAttempts);
     }
 
     Grasp_Result tryGrasp() {
+        ros::Time startWaiting;
+
         // check position values
-        normalizeOrientation();
         ROS_INFO("Checking for self collision");
         if(checkSelfcollision(objectPose)) {
             ROS_WARN("Grab position would selfcollide");
@@ -344,13 +327,17 @@ private:
         }
 
         // check if we really grabbed the object
-        if(detectObject()) {
-            ROS_WARN("There is still an object in front of the youbot. Retrying grabbing!");
-            // trying again
-            return FAILED;
+        ROS_INFO("Waiting for object detection...");
+        startWaiting = ros::Time::now();
+        while(!objectDetection.foundObject() && ros::ok()) {
+            if(timedOut(startWaiting, MAX_DETECTION_DURATION)) {
+                ROS_WARN("... no grabbable object found!");
+                return SUCCESSFULL;
+            }
         }
+        // found object, so try again
+        return FAILED;
 
-        return SUCCESSFULL;
     }
 
     void correctGraspPosition() {
@@ -371,7 +358,8 @@ private:
             dx = 0.04;
             youbot.move(dx, dy);
 
-        } else if(selfCollision) {
+        }
+        if(selfCollision) {
             // TODO: adapt or calc dynamically
             dx = -0.04;
             youbot.move(dx, dy);

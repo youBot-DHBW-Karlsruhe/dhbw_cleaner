@@ -17,7 +17,7 @@ find_package(catkin REQUIRED COMPONENTS
   roscpp
   cmake_modules
 
-  Eigen
+  #Eigen
 )
 
 ## System dependencies are found with CMake's conventions

@@ -42,7 +42,7 @@ class Manipulator {
         ros::Duration timeout;
         sensor_msgs::JointState jointState;
 
-        ros::Publisher gripperPublisher;
+        ros::Publisher armPublisher;
         ros::Subscriber armPositionSubscriber;
         actionlib::SimpleActionClient<torque_control::torque_trajectoryAction>* torqueController;
         actionlib::SimpleActionClient<control_msgs::FollowJointTrajectoryAction>* positionController;
@@ -60,6 +60,8 @@ class Manipulator {
 
         bool move_position(const brics_actuator::JointPositions& targetPosition, double duration);
 
+        bool move_brics(const brics_actuator::JointPositions& targetPosition);
+
     public:
         // constants
         const double DEFAULT_TIMEOUT;
@@ -74,7 +76,8 @@ class Manipulator {
         Manipulator(ros::NodeHandle& node, const Gripper& pGripper, const TrajectoryGeneratorFactory& tgFactory,
                     std::string jointState_topic = "/joint_states",
                     std::string torqueAction_topic = "/torque_control",
-                    std::string positionAction_topic = "/arm_1/arm_controller/follow_joint_trajectory");
+                    std::string positionAction_topic = "/arm_1/arm_controller/follow_joint_trajectory",
+                    std::string arm_topic = "/arm_1/arm_controller/position_command");
 
         ~Manipulator();
 

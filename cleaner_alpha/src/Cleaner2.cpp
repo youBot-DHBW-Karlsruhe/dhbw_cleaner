@@ -41,8 +41,10 @@ private:
     ros::Subscriber objectPositionSingleSubscriber;
     ros::Subscriber objectPositionAggregatedSubscriber;
 
-    geometry_msgs::Pose objectPosition_single;
-    geometry_msgs::Pose objectPosition_aggregated;
+    object_recognition::ObjectPosition objectPosition_single;
+    object_recognition::ObjectPosition objectPosition_aggregated;
+    //geometry_msgs::Pose objectPosition_single;
+    //geometry_msgs::Pose objectPosition_aggregated;
     bool available, found;
 
 public:
@@ -54,41 +56,56 @@ public:
     }
 
     void objectPosition_single_callback(const object_recognition::ObjectPositionConstPtr& msg) {
-        geometry_msgs::Pose pose;
-        pose.position = msg->pose.position;
-        pose.orientation = msg->pose.orientation;
-        objectPosition_single = pose;
+        objectPosition_single.header = msg->header;
+        objectPosition_single.object_id = msg->object_id;
+        objectPosition_single.pose = msg->pose;
         found = true;
     }
 
 
     void objectPosition_aggregated_callback(const object_recognition::ObjectPositionConstPtr& msg) {
-        geometry_msgs::Pose pose;
-        pose.position = msg->pose.position;
-        pose.orientation = msg->pose.orientation;
-        objectPosition_aggregated = pose;
+        objectPosition_aggregated.header = msg->header;
+        objectPosition_aggregated.object_id = msg->object_id;
+        objectPosition_aggregated.pose = msg->pose;
         available = true;
     }
 
     geometry_msgs::Pose getObjectPosition() {
         available = false;
-        return objectPosition_aggregated;
+        return objectPosition_aggregated.pose;
     }
 
-    bool foundObject() {
+    geometry_msgs::Pose getObjectPositionSingle() {
+        geometry_msgs::Pose pose = objectPosition_single.pose;
+        reset();
+        return pose;
+    }
+
+    bool foundObject(const ros::Time& from) {
         ros::spinOnce();
         ros::Duration(0.5).sleep();
         ros::spinOnce();
-        bool result = found;
+        bool result = (found && objectPosition_single.header.stamp >= from);
         found = false;
         return result;
     }
 
-    bool isAvailable() const {
+    bool isAvailable(const ros::Time& from) const {
         ros::spinOnce();
         ros::Duration(0.5).sleep();
         ros::spinOnce();
-        return available;
+        return (available && objectPosition_aggregated.header.stamp >= from);
+    }
+
+    void reset() {
+        ros::spinOnce();
+        ros::Duration(0.5).sleep();
+        ros::spinOnce();
+
+        available = false;
+        found = false;
+        objectPosition_aggregated = object_recognition::ObjectPosition();
+        objectPosition_single = object_recognition::ObjectPosition();
     }
 };
 
@@ -231,6 +248,7 @@ private:
         // arm to move pose?
         //TODO
 
+        ROS_INFO("Moving to next object (%f, %f)", p.x, p.y);
         // turn base into direction of the object
         // - -> left
         // + -> right
@@ -251,20 +269,24 @@ private:
     bool detectObject() {
         ros::Time startWaiting;
 
+        // reset object detection
+        objectDetection.reset();
+
         // retrieve object position
         ROS_INFO("Waiting for object detection...");
         startWaiting = ros::Time::now();
-        while(!objectDetection.foundObject() && ros::ok()) {
+        while(!objectDetection.foundObject(startWaiting) && ros::ok()) {
             if(timedOut(startWaiting, MAX_DETECTION_DURATION)) {
                 ROS_WARN("... no grabbable object found!");
                 return false;
             }
         }
 
-        while(!objectDetection.isAvailable() && ros::ok()) {
+        while(!objectDetection.isAvailable(startWaiting) && ros::ok()) {
             if(timedOut(startWaiting, MAX_DETECTION_DURATION)) {
-                ROS_WARN("... found object, but could not retrieve aggregated position data");
-                return false;
+                ROS_WARN("... could not retrieve aggregated position data, using single position data instead");
+                objectPose = objectDetection.getObjectPositionSingle();
+                return true;
             }
         }
         objectPose = objectDetection.getObjectPosition();
@@ -280,6 +302,7 @@ private:
         }
 
         // inside bounds?
+        ROS_WARN("Correction attempts = %d", correctionAttempts);
         if(checkIfPointIsNear(p) && correctionAttempts < 3) {
             // correct position
             geometry_msgs::Point32 movement = calcPositionCorrection(p);
@@ -291,19 +314,16 @@ private:
             correctionAttempts = 0;
             return false;
         }
-        ROS_INFO("Correction attempts = %d", correctionAttempts);
     }
 
     Grasp_Result tryGrasp() {
         ros::Time startWaiting;
 
         // check position values
-        ROS_INFO("Checking for self collision");
         if(checkSelfcollision(objectPose)) {
             ROS_WARN("Grab position would selfcollide");
             return OBJECT_NOT_REACHABLE;
         }
-        ROS_INFO("Checking for gripper range");
         if(!checkInRange(objectPose)) {
             ROS_WARN("Grab position outside of gripper range");
             return OBJECT_NOT_REACHABLE;
@@ -329,12 +349,13 @@ private:
         // check if we really grabbed the object
         ROS_INFO("Waiting for object detection...");
         startWaiting = ros::Time::now();
-        while(!objectDetection.foundObject() && ros::ok()) {
+        while(!objectDetection.foundObject(startWaiting) && ros::ok()) {
             if(timedOut(startWaiting, MAX_DETECTION_DURATION)) {
-                ROS_WARN("... no grabbable object found!");
+                ROS_INFO("... no grabbable object found!");
                 return SUCCESSFULL;
             }
         }
+        ROS_WARN("Found object, therefore grabbing must have been failed");
         // found object, so try again
         return FAILED;
 
@@ -348,6 +369,7 @@ private:
         bool selfCollision = checkSelfcollision(objectPose);
         bool outsideRange = !checkInRange(objectPose);
 
+        ROS_INFO("Correcting grasp position");
         // calc correction and back to detectObject-loop
         if(outsideRange) {
             // TODO: adapt
@@ -358,8 +380,7 @@ private:
             dx = 0.04;
             youbot.move(dx, dy);
 
-        }
-        if(selfCollision) {
+        } else if(selfCollision) {
             // TODO: adapt or calc dynamically
             dx = -0.04;
             youbot.move(dx, dy);
@@ -473,6 +494,9 @@ public:
             if(!manipulator.returnToInit()) {
               throw ExecutionException("Could not move arm to INIT pose!");
             }
+            ROS_INFO("\n--------------------------------------------\n"
+                     "Grabbed %d objects.\nFINISHED!\n"
+                     "--------------------------------------------", N_OBJECTS);
         } catch(std::exception e) {
             ROS_ERROR_STREAM("There was a runtime error: " << e.what());
         }

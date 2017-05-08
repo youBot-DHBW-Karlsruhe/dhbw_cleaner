@@ -1,0 +1,7 @@
+<?xml version="1.0"?>
+<launch>
+
+	<!-- launch find_object node for object detection and dependencies -->
+	<include file="$(find object_recognition)/launch/find_object_3d.launch" />
+
+</launch>

@@ -7,7 +7,17 @@
 	<node name="ik_solver_service" pkg="ik_solver_service" type="ik_solver_service" output="screen" />
 
 	<!-- launch find_object node for object detection and dependencies -->
+<!--	
 	<include file="$(find object_recognition)/launch/find_object_3d.launch" />
+-->
+
+	<!-- launch sick tim laser scanner -->
+	<node name="sick_tim551_2050001" pkg="sick_tim" type="sick_tim551_2050001" respawn="false" output="screen">
+	    <!-- Enables TCP instead of USB connection -->
+		 <param name="hostname" type="string" value="169.254.8.76" />
+		 <param name="port" type="string" value="2111" />
+		 <param name="timelimit" type="int" value="5" />
+	</node>
 
 	<!-- start laser assembler -->
 	<node type="laser_scan_assembler" pkg="laser_assembler" name="laser_assembler">

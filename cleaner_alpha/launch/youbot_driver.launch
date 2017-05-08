@@ -4,19 +4,6 @@
 	<!-- include original youbot driver launch file -->
 	<include file="$(find youbot_driver_ros_interface)/launch/youbot_driver.launch"/>
 
-	<!-- launch sick tim laser scanner -->
-	<node name="sick_tim551_2050001" pkg="sick_tim" type="sick_tim551_2050001" respawn="false" output="screen">
-	    <!-- Enables TCP instead of USB connection -->
-		 <param name="hostname" type="string" value="169.254.8.76" />
-		 <param name="port" type="string" value="2111" />
-		 <param name="timelimit" type="int" value="5" />
-	</node>
-
-	<!-- launch camera -->
-<!--
-	<include file="$(find openni_launch)/launch/openni.launch" />
--->
-
 	<!-- Upload youbot model to parameter server -->
 	<param name="robot_description" command="$(find xacro)/xacro.py $(find cleaner_alpha)/robots/youbot.urdf.xacro" />
 

@@ -24,7 +24,7 @@ Install these packages as binaries:
 These packages must be installed from source:
 - [torque_control] and all its dependencies. Please follow the installation description in the README-File of the author.
 
-A more detailled setup guide is available [here](https://github.com/youBot-DHBW-Karlsruhe/dhbw_cleaner/tree/master/0-Documentation/EnvironmentSetup.md).
+A more detailled setup guide is available [here](0-Documentation/EnvironmentSetup.md).
 
 
 ## Installation
@@ -44,12 +44,12 @@ coming soon...
 
 
 
-[0][https://github.com/youBot-DHBW-Karlsruhe/dhbw_cleaner/tree/master/0-Documentation]
-[1][https://github.com/youBot-DHBW-Karlsruhe/dhbw_cleaner/tree/master/cleaner_alpha]
-[2][https://github.com/youBot-DHBW-Karlsruhe/dhbw_cleaner/tree/master/laser_to_cloud]
-[3][https://github.com/youBot-DHBW-Karlsruhe/dhbw_cleaner/tree/master/object_finder_2d]
-[4][https://github.com/youBot-DHBW-Karlsruhe/dhbw_cleaner/tree/master/object_recognition]
+[0]: 0-Documentation
+[1]: cleaner_alpha
+[2]: laser_to_cloud
+[3]: object_finder_2d
+[4]: object_recognition
 
-[find_object_2d](https://github.com/introlab/find-object)
-[rpg_youbot_torque_control](https://github.com/uzh-rpg/rpg_youbot_torque_control)
-[laser_pipeline](https://github.com/ros-perception/laser_pipeline)
+[find_object_2d]: https://github.com/introlab/find-object
+[rpg_youbot_torque_control]: https://github.com/uzh-rpg/rpg_youbot_torque_control
+[laser_pipeline]: https://github.com/ros-perception/laser_pipeline

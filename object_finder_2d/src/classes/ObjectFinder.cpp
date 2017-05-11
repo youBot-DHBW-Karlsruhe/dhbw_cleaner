@@ -169,6 +169,13 @@ bool ObjectFinder::invalidPointValue(const geometry_msgs::Point32 &point, float 
         return true;
     }
 
+    // for demo only
+    // (laser scanner must be defect, because it is displaying a wall at the right side of the youbot, which isn't there in reality)
+    // --> ignore point far right
+    if(point.y > 0.30 && point.x < 0.20) {
+        return true;
+    }
+
     return false;
 }
 
